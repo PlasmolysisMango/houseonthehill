@@ -43,10 +43,11 @@ type GameScene struct {
 	deck   *deck.Deck
 	player *player.Player
 
-	state    gameState
-	drawn    *tile.RoomTile
-	target   board.Cell
-	useFront bool // toggle whether to flip drawn tile preview face up
+	state     gameState
+	drawn     *tile.RoomTile
+	target    board.Cell
+	entrySide int  // world side of the drawn tile that must face the player
+	useFront  bool // toggle whether to flip drawn tile preview face up
 
 	// click vs drag detection
 	pressX, pressY int
@@ -86,9 +87,20 @@ func NewGameScene(useExtension bool, screenW, screenH int) (*GameScene, error) {
 		state:   stateIdle,
 	}
 
-	// place starter rooms horizontally at y=0, columns 0..len-1
+	// Place starter rooms in a vertical column matching the original game's
+	// layout: Entrance Hall at the bottom (y=0), Foyer above it (y=-1) and
+	// Grand Staircase at the top (y=-2). The starter image is laid out
+	// left-to-right as [staircase, foyer, entrance], so we map by index.
+	starterCells := []board.Cell{
+		{X: 0, Y: -2}, // index 0 -> Grand Staircase
+		{X: 0, Y: -1}, // index 1 -> Foyer
+		{X: 0, Y: 0},  // index 2 -> Entrance Hall
+	}
 	for i, t := range starters {
-		g.board.Place(board.Cell{X: i, Y: 0}, component.NewRoom(t))
+		if i >= len(starterCells) {
+			break
+		}
+		g.board.Place(starterCells[i], component.NewRoom(t))
 	}
 	g.player = player.New(board.Cell{X: 0, Y: 0})
 
@@ -137,16 +149,32 @@ func (g *GameScene) Update() (Scene, error) {
 	switch g.state {
 	case stateIdle:
 		if clicked && board.IsAdjacent(g.player.Pos, hover) {
-			if _, ok := g.board.At(hover); ok {
+			side, ok := sideFromDelta(g.player.Pos, hover)
+			if !ok {
+				break
+			}
+			curRoom, _ := g.board.At(g.player.Pos)
+			if curRoom == nil || !curRoom.Tile.HasDoor(side) {
+				g.flash("No door on that side of this room.")
+				break
+			}
+			if room, ok := g.board.At(hover); ok {
+				if !room.Tile.HasDoor(tile.OppositeSide(side)) {
+					g.flash("The next room has no door facing here.")
+					break
+				}
 				g.player.Pos = hover
 				g.flash("Moved.")
 			} else {
 				if t := g.deck.Draw(); t != nil {
 					g.drawn = t
 					g.target = hover
+					g.entrySide = tile.OppositeSide(side) // side of new tile facing the player
 					g.useFront = true
 					g.state = stateDrawing
-					g.flash("Press R to rotate, click to confirm, Esc to cancel.")
+					// auto-rotate so the entry side has a door if possible
+					g.autoOrientDrawn()
+					g.flash("R rotate, click to confirm (door must face you), Esc cancel.")
 				} else {
 					g.flash("Deck is empty.")
 				}
@@ -166,13 +194,17 @@ func (g *GameScene) Update() (Scene, error) {
 			g.flash("Cancelled.")
 		}
 		if clicked {
-			room := component.NewRoom(g.drawn)
-			room.Revealed = true
-			g.board.Place(g.target, room)
-			g.player.Pos = g.target
-			g.drawn = nil
-			g.state = stateIdle
-			g.flash("Room placed.")
+			if !g.drawn.HasDoor(g.entrySide) {
+				g.flash("This rotation has no door facing you. Press R to rotate.")
+			} else {
+				room := component.NewRoom(g.drawn)
+				room.Revealed = true
+				g.board.Place(g.target, room)
+				g.player.Pos = g.target
+				g.drawn = nil
+				g.state = stateIdle
+				g.flash("Room placed.")
+			}
 		}
 	}
 
@@ -189,10 +221,19 @@ func (g *GameScene) Draw(screen *ebiten.Image) {
 		room.Draw(screen, float64(cell.X)*TileSize, float64(cell.Y)*TileSize, TileSize, camGeo)
 	}
 
-	// 2. neighbour highlights from the player's cell
-	for _, n := range g.board.Neighbors(g.player.Pos) {
+	// 2. neighbour highlights from the player's cell, only on sides that have
+	// a door. Green = can move (target also has door back). Yellow = can draw
+	// a new room. Greyed-out targets that lack a return door are skipped.
+	curRoom, _ := g.board.At(g.player.Pos)
+	for i, n := range g.board.Neighbors(g.player.Pos) {
+		if curRoom == nil || !curRoom.Tile.HasDoor(i) {
+			continue
+		}
 		var col color.Color
-		if _, ok := g.board.At(n); ok {
+		if room, ok := g.board.At(n); ok {
+			if !room.Tile.HasDoor(tile.OppositeSide(i)) {
+				continue // walled-off neighbour
+			}
 			col = color.RGBA{R: 80, G: 200, B: 120, A: 220} // can move
 		} else {
 			col = color.RGBA{R: 230, G: 200, B: 80, A: 220} // can draw
@@ -250,6 +291,32 @@ func worldToCell(wx, wy float64) board.Cell {
 	return board.Cell{
 		X: int(math.Floor(wx / TileSize)),
 		Y: int(math.Floor(wy / TileSize)),
+	}
+}
+
+// sideFromDelta returns the side index (matching board.Directions / tile.Side*)
+// from a to b when b is one of the four cardinal neighbours of a.
+func sideFromDelta(a, b board.Cell) (int, bool) {
+	dx, dy := b.X-a.X, b.Y-a.Y
+	for i, d := range board.Directions {
+		if d.X == dx && d.Y == dy {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// autoOrientDrawn rotates the freshly drawn tile (up to three times) so that
+// the entry side has a door, if any rotation can satisfy that.
+func (g *GameScene) autoOrientDrawn() {
+	if g.drawn == nil {
+		return
+	}
+	for i := 0; i < 4; i++ {
+		if g.drawn.HasDoor(g.entrySide) {
+			return
+		}
+		g.drawn.RotateCW()
 	}
 }
 
