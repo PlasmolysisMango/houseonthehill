@@ -1,0 +1,8 @@
+2026/05/17 16:23:30 Listening on :17426
+2026/05/17 16:23:30 Error at server.ListenAndServe: listen tcp :17426: bind: address already in use
+2026/05/17 16:23:33 proxy listening on :7426 -> http://127.0.0.1:17426 (wasm_exec.js override: "/root/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.25.10.linux-amd64/lib/wasm/wasm_exec.js")
+2026/05/17 16:23:33 listen tcp :7426: bind: address already in use
+exit status 1
+2026/05/17 16:23:40 http: proxy error: context canceled
+2026/05/17 16:23:41 go build -o /tmp/3453974190/main.wasm ./cmd
+2026/05/17 16:23:49 go build -o /tmp/3453974190/main.wasm ./cmd
