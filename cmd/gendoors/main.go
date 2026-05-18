@@ -20,11 +20,17 @@ import (
 
 const (
 	doorBandRatio   = 0.25
-	doorYellowRatio = 0.0015
+	doorYellowRatio = 0.004
 )
 
+// isDoorYellow matches the door bracket color used in the artwork. The brackets
+// are not pure (255,255,0) yellow; many pixels (especially anti-aliased edges
+// and JPEG-compressed regions) sit around (213,166,0) — a saturated
+// orange-yellow. We accept any pixel that is bright in red+green and very low
+// in blue, while still rejecting the brown wood floor whose red channel is
+// well below 200.
 func isDoorYellow(r8, g8, b8 int) bool {
-	return r8 > 200 && g8 > 180 && b8 < 100 && r8-b8 > 100 && g8-b8 > 80
+	return r8 > 200 && g8 > 150 && b8 < 80 && r8-b8 > 100
 }
 
 func bandYellowRatio(img image.Image, x0, y0, x1, y1 int) float64 {
