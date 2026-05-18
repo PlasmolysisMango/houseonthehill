@@ -3,73 +3,76 @@
 
 package assets
 
-// tileDoors maps each valid tile ID to its door layout at rotation 0.
-// Side order: [up, right, down, left]. IDs not present in this map
-// are blank artwork cells or had no detectable doors and are skipped.
-var tileDoors = map[int][4]bool{
-	0    : {true , true , true , true }, // base r0 c0
-	1    : {true , true , true , true }, // base r0 c1
-	2    : {true , true , true , true }, // base r0 c2
-	3    : {true , true , true , true }, // base r0 c3
-	4    : {true , true , true , false}, // base r0 c4
-	5    : {true , true , true , false}, // base r0 c5
-	6    : {true , false, false, false}, // base r0 c6
-	7    : {false, true , true , true }, // base r0 c7
-	8    : {true , true , true , false}, // base r0 c8
-	9    : {false, true , true , false}, // base r0 c9
-	10   : {false, true , true , false}, // base r1 c0
-	11   : {true , true , true , false}, // base r1 c1
-	12   : {true , true , true , true }, // base r1 c2
-	13   : {true , true , false, false}, // base r1 c3
-	14   : {true , true , true , false}, // base r1 c4
-	15   : {false, true , true , false}, // base r1 c5
-	16   : {true , false, true , false}, // base r1 c6
-	17   : {false, true , true , true }, // base r1 c7
-	18   : {false, true , true , false}, // base r1 c8
-	19   : {true , true , false, true }, // base r1 c9
-	20   : {false, true , true , true }, // base r2 c0
-	21   : {true , true , true , true }, // base r2 c1
-	22   : {true , true , false, false}, // base r2 c2
-	23   : {true , true , true , true }, // base r2 c3
-	24   : {true , true , true , true }, // base r2 c4
-	25   : {true , true , false, false}, // base r2 c5
-	26   : {false, true , true , true }, // base r2 c6
-	27   : {true , true , true , true }, // base r2 c7
-	28   : {true , false, false, false}, // base r2 c8
-	29   : {true , true , true , false}, // base r2 c9
-	30   : {true , true , true , false}, // base r3 c0
-	31   : {false, true , true , false}, // base r3 c1
-	32   : {true , false, true , true }, // base r3 c2
-	33   : {true , true , true , true }, // base r3 c3
-	34   : {true , true , false, false}, // base r3 c4
-	35   : {true , true , true , false}, // base r3 c5
-	36   : {false, true , false, true }, // base r3 c6
-	37   : {true , true , false, false}, // base r3 c7
-	38   : {true , true , true , true }, // base r3 c8
-	39   : {true , false, true , false}, // base r3 c9
-	40   : {false, true , false, false}, // base r4 c0
-	41   : {true , false, true , false}, // base r4 c1
-	42   : {true , true , true , false}, // base r4 c2
-	43   : {true , true , true , false}, // base r4 c3
-	501  : {false, true , false, false}, // extension r0 c1
-	503  : {false, true , false, false}, // extension r0 c3
-	504  : {false, true , false, false}, // extension r0 c4
-	505  : {false, true , false, false}, // extension r0 c5
-	506  : {false, true , false, false}, // extension r0 c6
-	507  : {false, true , false, false}, // extension r0 c7
-	508  : {false, true , false, false}, // extension r0 c8
-	509  : {false, true , false, false}, // extension r0 c9
-	510  : {false, true , false, false}, // extension r1 c0
-	511  : {false, true , false, false}, // extension r1 c1
-	512  : {false, true , false, false}, // extension r1 c2
-	513  : {false, true , false, false}, // extension r1 c3
-	514  : {false, true , false, false}, // extension r1 c4
-	515  : {false, true , false, false}, // extension r1 c5
-	516  : {false, true , false, false}, // extension r1 c6
-	517  : {false, true , false, false}, // extension r1 c7
-	518  : {false, true , false, false}, // extension r1 c8
-	519  : {false, true , true , false}, // extension r1 c9
-	1000 : {false, false, true , false}, // starter r0 c0 (manual: down door from staircase)
-	1001 : {true , false, true , false}, // starter r0 c1
-	1002 : {true , true , true , false}, // starter r0 c2
+// tileMeta maps each valid tile ID to its door layout and allowed
+// floors at rotation 0.
+//   Doors  side order: [up, right, down, left].
+//   Floors order:      [roof, upper, ground, basement].
+// IDs not present in this map are blank artwork cells or had no
+// detectable doors and are skipped.
+var tileMeta = map[int]TileMeta{
+	0    : {Doors: [4]bool{true , true , true , true }, Floors: [4]bool{false, true , false, false}}, // base r0 c0 (manual: upper-floor anchor)
+	1    : {Doors: [4]bool{true , true , true , true }, Floors: [4]bool{false, false, false, true }}, // base r0 c1 (manual: basement anchor)
+	2    : {Doors: [4]bool{true , true , true , true }, Floors: [4]bool{false, true , true , true }}, // base r0 c2
+	3    : {Doors: [4]bool{true , true , true , true }, Floors: [4]bool{false, true , true , true }}, // base r0 c3
+	4    : {Doors: [4]bool{true , true , true , false}, Floors: [4]bool{false, true , true , true }}, // base r0 c4
+	5    : {Doors: [4]bool{true , true , true , false}, Floors: [4]bool{false, true , true , true }}, // base r0 c5
+	6    : {Doors: [4]bool{true , false, false, false}, Floors: [4]bool{false, true , true , true }}, // base r0 c6
+	7    : {Doors: [4]bool{false, true , true , true }, Floors: [4]bool{false, true , true , true }}, // base r0 c7
+	8    : {Doors: [4]bool{true , true , true , false}, Floors: [4]bool{false, true , true , true }}, // base r0 c8
+	9    : {Doors: [4]bool{false, true , true , false}, Floors: [4]bool{false, true , false, true }}, // base r0 c9
+	10   : {Doors: [4]bool{false, true , true , false}, Floors: [4]bool{false, true , false, true }}, // base r1 c0
+	11   : {Doors: [4]bool{true , true , true , false}, Floors: [4]bool{false, true , false, true }}, // base r1 c1
+	12   : {Doors: [4]bool{true , true , true , true }, Floors: [4]bool{false, true , false, true }}, // base r1 c2
+	13   : {Doors: [4]bool{true , true , false, false}, Floors: [4]bool{false, true , false, true }}, // base r1 c3
+	14   : {Doors: [4]bool{true , true , true , false}, Floors: [4]bool{false, true , false, true }}, // base r1 c4
+	15   : {Doors: [4]bool{false, true , true , false}, Floors: [4]bool{false, true , false, false}}, // base r1 c5
+	16   : {Doors: [4]bool{true , false, true , false}, Floors: [4]bool{false, true , false, false}}, // base r1 c6
+	17   : {Doors: [4]bool{false, true , true , true }, Floors: [4]bool{false, true , false, false}}, // base r1 c7
+	18   : {Doors: [4]bool{false, true , true , false}, Floors: [4]bool{false, true , false, false}}, // base r1 c8
+	19   : {Doors: [4]bool{true , true , false, true }, Floors: [4]bool{false, true , false, false}}, // base r1 c9
+	20   : {Doors: [4]bool{false, true , true , true }, Floors: [4]bool{false, true , false, false}}, // base r2 c0
+	21   : {Doors: [4]bool{true , true , true , true }, Floors: [4]bool{false, true , true , false}}, // base r2 c1
+	22   : {Doors: [4]bool{true , true , false, false}, Floors: [4]bool{false, true , true , false}}, // base r2 c2
+	23   : {Doors: [4]bool{true , true , true , true }, Floors: [4]bool{false, true , true , false}}, // base r2 c3
+	24   : {Doors: [4]bool{true , true , true , true }, Floors: [4]bool{false, true , true , false}}, // base r2 c4
+	25   : {Doors: [4]bool{true , true , false, false}, Floors: [4]bool{false, true , true , false}}, // base r2 c5
+	26   : {Doors: [4]bool{false, true , true , true }, Floors: [4]bool{false, true , true , false}}, // base r2 c6
+	27   : {Doors: [4]bool{true , true , true , true }, Floors: [4]bool{false, false, true , false}}, // base r2 c7
+	28   : {Doors: [4]bool{true , false, false, false}, Floors: [4]bool{false, false, true , false}}, // base r2 c8
+	29   : {Doors: [4]bool{true , true , true , false}, Floors: [4]bool{false, false, true , false}}, // base r2 c9
+	30   : {Doors: [4]bool{true , true , true , false}, Floors: [4]bool{false, false, true , false}}, // base r3 c0
+	31   : {Doors: [4]bool{false, true , true , false}, Floors: [4]bool{false, false, true , false}}, // base r3 c1
+	32   : {Doors: [4]bool{true , false, true , true }, Floors: [4]bool{false, false, true , false}}, // base r3 c2
+	33   : {Doors: [4]bool{true , true , true , true }, Floors: [4]bool{false, false, true , true }}, // base r3 c3
+	34   : {Doors: [4]bool{true , true , false, false}, Floors: [4]bool{false, false, true , true }}, // base r3 c4
+	35   : {Doors: [4]bool{true , true , true , false}, Floors: [4]bool{false, false, false, true }}, // base r3 c5
+	36   : {Doors: [4]bool{false, true , false, true }, Floors: [4]bool{false, false, false, true }}, // base r3 c6
+	37   : {Doors: [4]bool{true , true , false, false}, Floors: [4]bool{false, false, false, true }}, // base r3 c7
+	38   : {Doors: [4]bool{true , true , true , true }, Floors: [4]bool{false, false, false, true }}, // base r3 c8
+	39   : {Doors: [4]bool{true , false, true , false}, Floors: [4]bool{false, false, false, true }}, // base r3 c9
+	40   : {Doors: [4]bool{false, true , false, false}, Floors: [4]bool{false, false, false, true }}, // base r4 c0
+	41   : {Doors: [4]bool{true , false, true , false}, Floors: [4]bool{false, false, false, true }}, // base r4 c1
+	42   : {Doors: [4]bool{true , true , true , false}, Floors: [4]bool{false, false, false, true }}, // base r4 c2
+	43   : {Doors: [4]bool{true , true , true , false}, Floors: [4]bool{false, false, false, true }}, // base r4 c3
+	501  : {Doors: [4]bool{false, true , false, false}, Floors: [4]bool{true , true , true , true }}, // extension r0 c1
+	503  : {Doors: [4]bool{false, true , false, false}, Floors: [4]bool{true , true , true , false}}, // extension r0 c3
+	504  : {Doors: [4]bool{false, true , false, false}, Floors: [4]bool{true , true , false, true }}, // extension r0 c4
+	505  : {Doors: [4]bool{false, true , false, false}, Floors: [4]bool{true , true , false, false}}, // extension r0 c5
+	506  : {Doors: [4]bool{false, true , false, false}, Floors: [4]bool{true , true , false, false}}, // extension r0 c6
+	507  : {Doors: [4]bool{false, true , false, false}, Floors: [4]bool{true , true , false, false}}, // extension r0 c7
+	508  : {Doors: [4]bool{false, true , false, false}, Floors: [4]bool{true , true , false, false}}, // extension r0 c8
+	509  : {Doors: [4]bool{false, true , false, false}, Floors: [4]bool{true , true , false, false}}, // extension r0 c9
+	510  : {Doors: [4]bool{false, true , false, false}, Floors: [4]bool{true , false, false, false}}, // extension r1 c0
+	511  : {Doors: [4]bool{false, true , false, false}, Floors: [4]bool{false, true , true , false}}, // extension r1 c1
+	512  : {Doors: [4]bool{false, true , false, false}, Floors: [4]bool{false, true , true , false}}, // extension r1 c2
+	513  : {Doors: [4]bool{false, true , false, false}, Floors: [4]bool{false, false, true , false}}, // extension r1 c3
+	514  : {Doors: [4]bool{false, true , false, false}, Floors: [4]bool{false, false, true , true }}, // extension r1 c4
+	515  : {Doors: [4]bool{false, true , false, false}, Floors: [4]bool{false, false, true , true }}, // extension r1 c5
+	516  : {Doors: [4]bool{false, true , false, false}, Floors: [4]bool{false, false, true , true }}, // extension r1 c6
+	517  : {Doors: [4]bool{false, true , false, false}, Floors: [4]bool{false, false, false, true }}, // extension r1 c7
+	518  : {Doors: [4]bool{false, true , false, false}, Floors: [4]bool{false, false, false, true }}, // extension r1 c8
+	519  : {Doors: [4]bool{false, true , true , false}, Floors: [4]bool{false, false, false, true }}, // extension r1 c9
+	1000 : {Doors: [4]bool{false, false, true , false}, Floors: [4]bool{false, false, true , false}}, // starter r0 c0 (manual: down door from staircase)
+	1001 : {Doors: [4]bool{true , false, true , false}, Floors: [4]bool{false, false, true , false}}, // starter r0 c1
+	1002 : {Doors: [4]bool{true , true , true , false}, Floors: [4]bool{false, false, true , false}}, // starter r0 c2
 }

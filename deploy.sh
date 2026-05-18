@@ -83,7 +83,7 @@ start_processes_fg() {
         log "[warn] no local wasm_exec.js; proxy will fall through to wasmserve (network needed)"
     fi
     log "Starting wasmserve on :${INTERNAL_PORT} ..."
-    wasmserve -http ":${INTERNAL_PORT}" "${PKG_PATH}" >>"$LOG_FILE" 2>&1 &
+    GOOS=js GOARCH=wasm wasmserve -http ":${INTERNAL_PORT}" "${PKG_PATH}" >>"$LOG_FILE" 2>&1 &
     local ws_pid=$!
     echo "$ws_pid" > "$WS_PID_FILE"
     sleep 1
@@ -115,7 +115,7 @@ start_processes_bg() {
         log "[warn] no local wasm_exec.js; proxy will fall through to wasmserve (network needed)"
     fi
     log "Launching wasmserve in background on :${INTERNAL_PORT}..."
-    nohup wasmserve -http ":${INTERNAL_PORT}" "${PKG_PATH}" >>"$LOG_FILE" 2>&1 &
+    nohup env GOOS=js GOARCH=wasm wasmserve -http ":${INTERNAL_PORT}" "${PKG_PATH}" >>"$LOG_FILE" 2>&1 &
     echo $! > "$WS_PID_FILE"
     sleep 1
     if ! kill -0 "$(cat "$WS_PID_FILE")" 2>/dev/null; then
@@ -143,26 +143,16 @@ start_processes_bg() {
 }
 
 stop_processes() {
-    local stopped=0
-    for f in "$PROXY_PID_FILE" "$WS_PID_FILE"; do
-        [ -f "$f" ] || continue
-        local pid
-        pid="$(cat "$f")"
-        if kill -0 "$pid" 2>/dev/null; then
-            log "Stopping pid $pid (from $f)"
-            kill "$pid" || true
-            pkill -P "$pid" 2>/dev/null || true
-            sleep 1
-            kill -9 "$pid" 2>/dev/null || true
-            stopped=1
-        fi
-        rm -f "$f"
-    done
-    if [ "$stopped" = "0" ]; then
-        log "Nothing was running."
-    else
-        log "Stopped."
-    fi
+    log "Forcing stop of any process using ports ${PORT} and ${INTERNAL_PORT}..."
+    
+    # 使用 fuser 强行杀死占用端口的进程
+    fuser -k "${PORT}/tcp" 2>/dev/null || true
+    fuser -k "${INTERNAL_PORT}/tcp" 2>/dev/null || true
+    
+    # 清理 PID 文件
+    rm -f "$PROXY_PID_FILE" "$WS_PID_FILE"
+    
+    log "Cleanup complete."
 }
 
 status_processes() {

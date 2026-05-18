@@ -14,12 +14,21 @@ import (
 )
 
 const (
-	MainMap       = "主地图.jpg"
-	MainMapBack   = "主地图-背面.jpg"
-	EntryGround   = "入口大厅.png"
-	ExtendMap     = "扩展地图.jpg"
-	ExtendMapBack = "扩展地图-背面.jpg"
+	MainMap       = "main_map.jpg"
+	MainMapBack   = "main_map_back.jpg"
+	EntryGround   = "entry_hall.png"
+	ExtendMap     = "extension_map.jpg"
+	ExtendMapBack = "extension_map_back.jpg"
 )
+
+// TileMeta is the static, rotation-independent description of a room tile.
+// It is populated by the generated tileMeta map (see doors_gen.go).
+//   Doors  side order: [up, right, down, left] (matches tile.Side*).
+//   Floors order:      [roof, upper, ground, basement] (matches tile.Floor*).
+type TileMeta struct {
+	Doors  [4]bool
+	Floors [4]bool
+}
 
 //go:embed image
 var imageAssets embed.FS
@@ -68,7 +77,7 @@ func LoadStarterTiles() ([]*tile.RoomTile, error) {
 	out := make([]*tile.RoomTile, 0, len(imgs))
 	for i, im := range imgs {
 		id := 1000 + i
-		doors, ok := tileDoors[id]
+		meta, ok := tileMeta[id]
 		if !ok {
 			continue
 		}
@@ -77,7 +86,8 @@ func LoadStarterTiles() ([]*tile.RoomTile, error) {
 			Source: tile.SourceStarter,
 			Front:  im,
 			Back:   im,
-			Doors:  doors,
+			Doors:  meta.Doors,
+			Floors: meta.Floors,
 		})
 	}
 	return out, nil
@@ -100,7 +110,7 @@ func loadDeckTiles(frontName, backName string, cols, rows int, idBase int, src t
 	out := make([]*tile.RoomTile, 0, len(frontTiles))
 	for i := range frontTiles {
 		id := idBase + i
-		doors, ok := tileDoors[id]
+		meta, ok := tileMeta[id]
 		if !ok {
 			// Pre-generated table omits blank/doorless cells, so skip them.
 			continue
@@ -110,7 +120,8 @@ func loadDeckTiles(frontName, backName string, cols, rows int, idBase int, src t
 			Source: src,
 			Front:  frontTiles[i],
 			Back:   backTiles[i],
-			Doors:  doors,
+			Doors:  meta.Doors,
+			Floors: meta.Floors,
 		})
 	}
 	return out, nil

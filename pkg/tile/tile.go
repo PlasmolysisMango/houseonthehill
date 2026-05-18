@@ -19,6 +19,17 @@ const (
 	SideLeft  = 3 // -x
 )
 
+// Floor identifies a vertical floor of the haunted mansion. The values match
+// the layout used by tileMeta in the assets package: [roof, upper, ground,
+// basement]. Tiles carry a [4]bool mask declaring which floors they may be
+// drawn on.
+const (
+	FloorRoof     = 0
+	FloorUpper    = 1
+	FloorGround   = 2
+	FloorBasement = 3
+)
+
 // OppositeSide returns the side index facing the opposite direction.
 func OppositeSide(s int) int { return (s + 2) % 4 }
 
@@ -33,6 +44,10 @@ type RoomTile struct {
 	// Doors holds whether the tile has a door on each original side
 	// (rotation==0). Index order matches the Side* constants.
 	Doors [4]bool
+
+	// Floors records on which floors the tile may be placed. Index order
+	// matches the Floor* constants. Rotation does not affect this mask.
+	Floors [4]bool
 }
 
 // RotateCW rotates the tile 90 degrees clockwise.
@@ -57,4 +72,12 @@ func (t *RoomTile) DoorCount() int {
 		}
 	}
 	return n
+}
+
+// AllowsFloor reports whether the tile may be placed on the given floor.
+func (t *RoomTile) AllowsFloor(floor int) bool {
+	if floor < 0 || floor >= len(t.Floors) {
+		return false
+	}
+	return t.Floors[floor]
 }

@@ -21,7 +21,20 @@ import (
 const (
 	doorBandRatio   = 0.25
 	doorYellowRatio = 0.004
+
+	// Floor labels sit in the central column between the two window
+	// stacks. The band height is intentionally generous so anti-aliased
+	// edges of the label box still contribute enough yellow pixels.
+	floorBandHRatio  = 0.06
+	floorYellowRatio = 0.10
 )
+
+// floorCenters lists the vertical centers of each floor label as fractions
+// of the cell height. Index order matches tile.Floor* constants:
+// [0] Roof, [1] Upper, [2] Ground, [3] Basement. The values were calibrated
+// against main_map_back.jpg / extension_map_back.jpg by sampling the yellow
+// ratio along the central column of each cell.
+var floorCenters = [4]float64{0.25, 0.40, 0.55, 0.70}
 
 // isDoorYellow matches the door bracket color used in the artwork. The brackets
 // are not pure (255,255,0) yellow; many pixels (especially anti-aliased edges
@@ -51,6 +64,45 @@ func bandYellowRatio(img image.Image, x0, y0, x1, y1 int) float64 {
 		return 0
 	}
 	return float64(yellow) / float64(total)
+}
+
+// detectFloors examines a back-image cell and returns which floor markers
+// are highlighted in yellow. Index order matches tile.Floor* constants:
+// [0] Roof, [1] Upper, [2] Ground, [3] Basement.
+func detectFloors(img image.Image, rect image.Rectangle) [4]bool {
+	w := rect.Dx()
+	h := rect.Dy()
+	cx0 := rect.Min.X + w*30/100
+	cx1 := rect.Min.X + w*70/100
+	bandH := int(float64(h) * floorBandHRatio)
+	if bandH < 4 {
+		bandH = 4
+	}
+	var floors [4]bool
+	for i, c := range floorCenters {
+		cy := rect.Min.Y + int(float64(h)*c)
+		y0 := cy - bandH/2
+		y1 := cy + bandH/2
+		if y0 < rect.Min.Y {
+			y0 = rect.Min.Y
+		}
+		if y1 > rect.Max.Y {
+			y1 = rect.Max.Y
+		}
+		if bandYellowRatio(img, cx0, y0, cx1, y1) > floorYellowRatio {
+			floors[i] = true
+		}
+	}
+	return floors
+}
+
+func anyFloor(f [4]bool) bool {
+	for _, v := range f {
+		if v {
+			return true
+		}
+	}
+	return false
 }
 
 func detectDoors(img image.Image, rect image.Rectangle) [4]bool {
@@ -104,9 +156,10 @@ func anyDoor(d [4]bool) bool {
 // --- sheet processing ---
 
 type entry struct {
-	ID    int
-	Note  string
-	Doors [4]bool
+	ID     int
+	Note   string
+	Doors  [4]bool
+	Floors [4]bool
 }
 
 func loadImage(path string) image.Image {
@@ -133,8 +186,16 @@ func cellRect(img image.Image, cols, rows, c, r int) image.Rectangle {
 	return image.Rect(x0, y0, x0+tw, y0+th)
 }
 
-func processSheet(path string, cols, rows, idBase int, kind string, out *[]entry, force func(idx int, doors *[4]bool, note *string)) {
-	img := loadImage(path)
+// forceFn lets a sheet-specific tweak adjust both doors and floors after
+// auto-detection (e.g. the staircase tile that has no painted door bracket).
+type forceFn func(idx int, doors *[4]bool, floors *[4]bool, note *string)
+
+func processSheet(frontPath, backPath string, cols, rows, idBase int, kind string, out *[]entry, defaultFloors [4]bool, force forceFn) {
+	img := loadImage(frontPath)
+	var back image.Image
+	if backPath != "" {
+		back = loadImage(backPath)
+	}
 	for r := 0; r < rows; r++ {
 		for c := 0; c < cols; c++ {
 			idx := r*cols + c
@@ -143,14 +204,21 @@ func processSheet(path string, cols, rows, idBase int, kind string, out *[]entry
 				continue
 			}
 			d := detectDoors(img, rect)
+			f := defaultFloors
+			if back != nil {
+				bRect := cellRect(back, cols, rows, c, r)
+				if !isBlank(back, bRect) {
+					f = detectFloors(back, bRect)
+				}
+			}
 			note := fmt.Sprintf("%s r%d c%d", kind, r, c)
 			if force != nil {
-				force(idx, &d, &note)
+				force(idx, &d, &f, &note)
 			}
 			if !anyDoor(d) {
 				continue
 			}
-			*out = append(*out, entry{ID: idBase + idx, Doors: d, Note: note})
+			*out = append(*out, entry{ID: idBase + idx, Doors: d, Floors: f, Note: note})
 		}
 	}
 }
@@ -158,8 +226,10 @@ func processSheet(path string, cols, rows, idBase int, kind string, out *[]entry
 func main() {
 	var out []entry
 
-	processSheet("assets/image/入口大厅.png", 3, 1, 1000, "starter", &out,
-		func(idx int, d *[4]bool, note *string) {
+	// The 3 starter tiles are always placed on the ground floor.
+	starterFloors := [4]bool{false, false, true, false}
+	processSheet("assets/image/entry_hall.png", "", 3, 1, 1000, "starter", &out, starterFloors,
+		func(idx int, d *[4]bool, _ *[4]bool, note *string) {
 			// The Grand Staircase tile (idx 0) has no yellow brackets in
 			// the artwork; its visible staircase implies a south door.
 			if idx == 0 && !anyDoor(*d) {
@@ -168,8 +238,23 @@ func main() {
 			}
 		})
 
-	processSheet("assets/image/主地图.jpg", 10, 5, 0, "base", &out, nil)
-	processSheet("assets/image/扩展地图.jpg", 10, 2, 500, "extension", &out, nil)
+	processSheet("assets/image/main_map.jpg", "assets/image/main_map_back.jpg",
+		10, 5, 0, "base", &out, [4]bool{},
+		func(idx int, _ *[4]bool, f *[4]bool, note *string) {
+			// The two anchor rooms ("上层" and "地下室") have a blank
+			// back artwork because their floor is implied by the room
+			// identity itself; pin them manually.
+			switch idx {
+			case 0: // r0 c0 = "上层" (Upper Floor) anchor tile
+				f[1] = true
+				*note += " (manual: upper-floor anchor)"
+			case 1: // r0 c1 = "地下室" (Basement) anchor tile
+				f[3] = true
+				*note += " (manual: basement anchor)"
+			}
+		})
+	processSheet("assets/image/extension_map.jpg", "assets/image/extension_map_back.jpg",
+		10, 2, 500, "extension", &out, [4]bool{}, nil)
 
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 
@@ -178,13 +263,19 @@ func main() {
 	fmt.Println()
 	fmt.Println("package assets")
 	fmt.Println()
-	fmt.Println("// tileDoors maps each valid tile ID to its door layout at rotation 0.")
-	fmt.Println("// Side order: [up, right, down, left]. IDs not present in this map")
-	fmt.Println("// are blank artwork cells or had no detectable doors and are skipped.")
-	fmt.Println("var tileDoors = map[int][4]bool{")
+	fmt.Println("// tileMeta maps each valid tile ID to its door layout and allowed")
+	fmt.Println("// floors at rotation 0.")
+	fmt.Println("//   Doors  side order: [up, right, down, left].")
+	fmt.Println("//   Floors order:      [roof, upper, ground, basement].")
+	fmt.Println("// IDs not present in this map are blank artwork cells or had no")
+	fmt.Println("// detectable doors and are skipped.")
+	fmt.Println("var tileMeta = map[int]TileMeta{")
 	for _, e := range out {
-		fmt.Printf("\t%-5d: {%-5v, %-5v, %-5v, %-5v}, // %s\n",
-			e.ID, e.Doors[0], e.Doors[1], e.Doors[2], e.Doors[3], e.Note)
+		fmt.Printf("\t%-5d: {Doors: [4]bool{%-5v, %-5v, %-5v, %-5v}, Floors: [4]bool{%-5v, %-5v, %-5v, %-5v}}, // %s\n",
+			e.ID,
+			e.Doors[0], e.Doors[1], e.Doors[2], e.Doors[3],
+			e.Floors[0], e.Floors[1], e.Floors[2], e.Floors[3],
+			e.Note)
 	}
 	fmt.Println("}")
 }
