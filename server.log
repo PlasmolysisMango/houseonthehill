@@ -1,4 +1,0 @@
-2026/05/18 17:11:10 Listening on :17426
-2026/05/18 17:11:11 proxy listening on :7426 -> http://127.0.0.1:17426 (wasm_exec.js override: "/usr/local/go/lib/wasm/wasm_exec.js")
-2026/05/18 17:11:17 go build -o /tmp/838560504/main.wasm ./cmd
-2026/05/18 17:11:30 http: proxy error: context canceled
