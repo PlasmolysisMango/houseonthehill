@@ -1,0 +1,118 @@
+# Betrayal at House on the Hill — 12 个角色基础数据
+#
+# 字段约定：id / name_cn / name_en / age / color_hex
+# 同色两人共用一张组合卡，选角时同色互斥
+# 四条属性轨道 (might/speed/sanity/knowledge) 共享 schema：
+#   tracks: 数值轨道 (index 0 = Dead)
+#   start : 初始 index (撞 0 角色死亡)
+# 当前所有角色统一占位轨道 [3,4,4,5,5,5,6,6] start=3，真实数值待对照规则书填入
+
+characters:
+  - id: 1
+    name_cn: "左思泽夫人"
+    name_en: "Madame Zostra"
+    age: 37
+    color_hex: "#0781BF"
+    might:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    speed:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    sanity:    { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    knowledge: { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+  - id: 2
+    name_cn: "薇薇安·洛佩兹"
+    name_en: "Vivian Lopez"
+    age: 42
+    color_hex: "#0781BF"
+    might:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    speed:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    sanity:    { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    knowledge: { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+  - id: 3
+    name_cn: "布兰登·贾斯珀"
+    name_en: "Brandon Jaspers"
+    age: 12
+    color_hex: "#29BD08"
+    might:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    speed:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    sanity:    { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    knowledge: { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+  - id: 4
+    name_cn: "彼得·秋元"
+    name_en: "Peter Akimoto"
+    age: 13
+    color_hex: "#29BD08"
+    might:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    speed:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    sanity:    { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    knowledge: { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+  - id: 5
+    name_cn: "珍妮·勒克莱尔"
+    name_en: "Jenny LeClerc"
+    age: 21
+    color_hex: "#7F00B8"
+    might:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    speed:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    sanity:    { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    knowledge: { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+  - id: 6
+    name_cn: "西瑟·格兰维尔"
+    name_en: "Heather Granville"
+    age: 18
+    color_hex: "#7F00B8"
+    might:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    speed:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    sanity:    { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    knowledge: { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+  - id: 7
+    name_cn: "“公牛”彼罗斯"
+    name_en: "Ox Bellows"
+    age: 23
+    color_hex: "#B60000"
+    might:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    speed:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    sanity:    { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    knowledge: { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+  - id: 8
+    name_cn: "达瑞“闪电”威廉姆斯"
+    name_en: "Darrin \"Flash\" Williams"
+    age: 20
+    color_hex: "#B60000"
+    might:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    speed:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    sanity:    { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    knowledge: { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+  - id: 9
+    name_cn: "佐伊·因斯特姆"
+    name_en: "Zoe Ingstrom"
+    age: 8
+    color_hex: "#CF6801"
+    might:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    speed:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    sanity:    { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    knowledge: { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+  - id: 10
+    name_cn: "蜜西·多布拉德"
+    name_en: "Missy Dubourde"
+    age: 9
+    color_hex: "#CF6801"
+    might:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    speed:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    sanity:    { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    knowledge: { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+  - id: 11
+    name_cn: "朗费罗教授"
+    name_en: "Professor Longfellow"
+    age: 57
+    color_hex: "#FFFFFF"
+    might:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    speed:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    sanity:    { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    knowledge: { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+  - id: 12
+    name_cn: "莱因哈特神父"
+    name_en: "Father Rhinehardt"
+    age: 62
+    color_hex: "#FFFFFF"
+    might:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    speed:     { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    sanity:    { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }
+    knowledge: { tracks: [3, 4, 4, 5, 5, 5, 6, 6], start: 3 }

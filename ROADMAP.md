@@ -62,6 +62,39 @@
 
 > 这是最先做、最关键的一步。所有后续阶段都要"读结构化数据"，而不是再写一遍中文字面量。
 
+### 2.0 当前进度
+
+**已落地（本次提交）**：
+
+- `cmd/gendoors` 现在同时副产 `assets/datafs/tile_meta.yaml`（65 条），含 `id/source/row/col/doors/floors` 等几何字段 + `name_cn/name_en` 占位文本字段。**重新生成时几何字段被覆盖，但人类填的文本字段会保留**（小型自实现 yaml 反读保边逻辑）。
+- 新增 `cmd/genmeta`：从 `assets/raw/Workshop/831685264.json`（29283 行）解析所有 `ObjectStates` + `ContainedObjects` + `States` 树，输出：
+    - `assets/datafs/monsters.yaml`：7 色怪物 pawn 池（红 24 + 橙 24 + 绿 16 + 蓝 9 + 紫 6 + 玫红 6 + 黄 6）含每只 GUID。
+    - `assets/datafs/tts_index.yaml`：277 条命名实体（去重后）含 nickname/kind/guid/description，作为后续阶段 5/6/7 的查询字典。
+- 新增 `cmd/genxls`：纯 Go 解析 .xls（`github.com/extrame/xls`，无需 LibreOffice / 外部工具）：
+    - `小黑屋/真相表.xls` → `assets/datafs/omens.yaml`：13 预兆 × 13 事件房间的 Haunt-roll 查询矩阵（matrix[ri][oi] = scenario_id）。预兆中文名来自表头，英文名在 `cmd/genxls` 的硬编码表中。
+    - `小黑屋/奸徒身份表.xls` → `assets/datafs/scenarios_index.yaml`：50 个剧本的奏徒目标描述（`{id, traitor}`，完全连续 1..50）。
+- 新增 `cmd/genrooms`：纯 Go 解析中文规则 PDF（`github.com/ledongthuc/pdf`，无需 LibreOffice）：
+    - `小黑屋/Betrayal at House on the Hill_cn.pdf` → `assets/datafs/rooms.yaml`：45 个有特别规则的房间，每条 `{name_cn, name_en, floors[4]bool, rule_text}`。
+    - 房间识别策略：以孤立 `(` 行为锚点，前一非空行必须为纯 ASCII（英文房名）以过滤规则正文中的括号；`(...)` 行内提取 `(basement|ground|upper|roof)` 关键字解析 floors。
+    - 文本截断锚点：`以上房间皆无特别规则` 是规则书在最后一个房间（酒窖 / Wine Cellar）后面的总结句，用作附录起点防止 rule_text 吞掉事件牌附录。
+- 新增 `cmd/gendoc`：纯 Go 解析 OLE2 .doc（无需任何第三方 OLE 库）——直接将全文件字节对重解释为 UTF-16LE code units，过一道 `[\p{Han}].{1,40}` 正则扫出汉字主导的连续文本 run：
+    - `小黑屋/房间表.doc` → `assets/datafs/rooms_doc.yaml`：43 个带中文名 + 类型标签的房间（`{name_cn, kind_cn, kind}`，17 event + 13 omen + 5 item + 8 base，0 unknown）。
+    - 为后续手填 `tile_meta.yaml` 提供完整中文名清单 + 类型参考，并补上 `rooms.yaml` 设计上不收入的“仅出现于房间表但规则书中未列出”的房间。
+- 新增 `assets/datafs/`（独立子包，不依赖 ebiten）`//go:embed *.yaml`，避免 `pkg/data` 测试时拉入 X11 依赖。
+- 新增 `pkg/data/`：`LoadTiles / LoadMonsters / LoadTTSIndex / LoadOmens / LoadScenarios / LoadRooms / LoadRoomsDoc`，单测覆盖锚点地块楼层 / 怪物分组 count / 关键 Haunt NPC 名存在性 / 预兆 × 房间金丝雀单元格 / 50 剧本连续性 / 房间名楼层金丝雀（陵墓·裂缝·塔楼·酒窖·阁楼）+ 酒窖 rule_text 长度回归校验 / .doc 房间名·类型金丝雀 + “unknown 零条”覆盖性校验 / **starter 三块 `start_cell` 金丝雀（他 tile 必为 nil）**。`go test ./pkg/data` 7 个测试全过。
+- **运行时接入**：`assets/image.go` 在 `LoadStarterTiles / loadDeckTiles` 中通过 `sync.Once` 懒加载 `tile_meta.yaml`，给每个 `RoomTile` 填 `NameCN/NameEN`；HUD 悬停时显示 `中文 / English [#id]`（CJK 字体接入在阶段 8，stub 先走 ASCII）。
+- **starter 几何配置驱动**：`tile_meta.yaml` 的 starter 三块新增 `start_cell: [x, y]` 字段（`pkg/data.TileMeta.StartCell *[2]int`），`cmd/gendoors` 重跑时与 `name_cn/name_en` 同等越过几何覆写保边。`assets.LoadStarterTiles` 返回 `[]StarterPlacement`（tile + cell），`pkg/scene/game.go` 不再硬编码 starter 列。玩家初始位置为 id=1002（入口大厅）的 cell。
+- **一键抽牌**：`pkg/scene/game.go` HUD 右上角新增 `Draw [D] (n)` 按钮 + `D` 键快捷键，选中当前房间第一个“有门且邻格为空”的黄色高亮格抽一张牌进入 `stateDrawing`；按钮在牌堆空 / 无候选格 / 抽牌中自动置灰。`GOOS=js GOARCH=wasm go build` 结果 17.8MB。
+- **数据源统一**：删除 `assets/doors_gen.go`（原生成的 `var tileMeta = map[int]TileMeta{...}`），`assets/image.go` 新开 `tileCacheEntry { Meta + NameCN/EN + StartCell }` 单一 `sync.Once` 懒加载，`tileMetaOf(id)` 提供 `Doors+Floors` 查询；`cmd/gendoors` 删除 stdout `var tileMeta` 写出代码路径及头部文档中 `> assets/doors_gen.go` 重定向。`tile_meta.yaml` 现为全部几何元数据唯一源，双写不一致风险彻底消除；vet/test/wasm 全绿。
+- `gopkg.in/yaml.v3` 已通过 `go mod tidy` 提升为 direct require；`github.com/extrame/xls`、`github.com/ledongthuc/pdf` 作为新依赖加入。
+
+**未做（doc 与图片限制）**：
+
+- `房间表.doc` 已通过 `cmd/gendoc` 的纯 Go UTF-16LE 扫描提取完成（不需要 LibreOffice / unioffice）。其他 doc【`标记牌表.doc / pw牌表.doc / 奸徒剧本.doc / 求生剧本.doc`】同样可用同一思路提取，留作阶段 4/5 按需动工。
+- `cmd/gencards / cmd/genchars`：当前环境 `file` / ImageMagick 无尺寸输出，需要先在能跑的环境下用 Go 写一段图片尺寸检测，再决定网格切分参数。**已留作下一子任务**。
+
+### 2.1 原始计划（保留供后续推进）
+
 **目标**：把 `assets/raw/` 里 doc/xls/jpg/json 中的规则数据，提取为项目可直接 `embed` + 反序列化使用的结构化文件。
 
 **输入**
@@ -77,7 +110,7 @@
 
 1. **新增 `cmd/genmeta/`**
     - 读 `Workshop/831685264.json`，提取 `Nickname / GUID / Description / States` 等字段。
-    - 与 `assets/doors_gen.go` 的 `tileMeta`（按 ID 索引）按几何位置或 GUID 对齐，给每张地块补 `Name / Outdoor / SpecialKind`。
+    - 与 `assets/datafs/tile_meta.yaml` 的 `tiles[]`（按 ID 索引）按几何位置或 GUID 对齐，给每张地块补 `Name / Outdoor / SpecialKind`。
     - 输出 `assets/tile_meta.yaml`（YAML 比 Go 字面量好 review）。
 2. **doc/xls → yaml**
     - `房间表.doc` → `assets/data/rooms.yaml`：每条 `{id, name_cn, name_en, floors, event_text, item_text}`。
@@ -93,7 +126,7 @@
     - 用 `//go:embed assets/data/*.yaml`，`gopkg.in/yaml.v3` 反序列化。
     - 启动时一次性加载，缓存为只读单例。
 5. **不动正在用的 `tileMeta`**
-    - 当前生成路径仍跑 `cmd/gendoors`；阶段 1 末尾让 `assets/image.go` 同时 attach 来自 `tile_meta.yaml` 的 `Name / Outdoor` 等字段到 `RoomTile`。
+    - `assets/image.go` 已经把 `Doors / Floors / NameCN / NameEN / StartCell` 全部从 `tile_meta.yaml` 懒加载（`assets/doors_gen.go` 已删除，`cmd/gendoors` 只写 yaml）；阶段 1 末尾让该 cache 同时 attach 来自扩展 yaml 的 `Outdoor / SpecialKind / EventTrigger` 等字段到 `RoomTile`。
 
 **涉及文件**
 
@@ -221,7 +254,7 @@ pkg/tile/tile.go            新增 SpecialKind 枚举
     - 三堆 `EventDeck / ItemDeck / OmenDeck`，每张牌 `{ID, Name, Kind, Text, Effects []Effect}`。
     - `Effect` 先做枚举：`stat_shift / draw_card / move / require_roll / spawn_token`。所有"复杂"事件先标 `Effect{Kind:"manual"}`，runtime 弹文本提示由玩家自助裁决（非常重要：不阻塞流程）。
 2. **房间触发**
-    - `tileMeta` 增加 `EventTrigger / ItemTrigger / OmenTrigger bool`（部分房间名右下角有图标，由 `cmd/gendoors` 识别或手工 yaml 覆盖）。
+    - `tile_meta.yaml` 增加 `event_trigger / item_trigger / omen_trigger bool` 字段（部分房间名右下角有图标，由 `cmd/gendoors` 识别或手工 yaml 覆盖），运行时由 `assets.tileMetaOf` 暴露三个 bool。
     - 进入新房 + Revealed=false → 翻面 + 触发对应抽牌。
 3. **HauntTrack**
     - `pkg/turn/haunt.go`：`OmenCount` 累加；每抽 omen 立即 Haunt Roll。
@@ -237,7 +270,7 @@ pkg/cards/effects.go            新增（基础 effect 解释器）
 pkg/turn/haunt.go               新增
 pkg/scene/dialog/card.go        新增
 assets/data/cards.yaml          来自阶段 1
-assets/doors_gen.go             扩展三个 trigger bool
+assets/doors_gen.go             ❌ 已删（geometry 全部走 tile_meta.yaml）
 ```
 
 **验收准则**
@@ -474,12 +507,20 @@ func processSheet(
 
 ### A.5 生成结果
 
-`assets/doors_gen.go`：
+`assets/datafs/tile_meta.yaml`（已删除的 `assets/doors_gen.go` 旧格式仅作历史参考）：
 
-```go
-var tileMeta = map[int]TileMeta{
-    ID: {Doors: [4]bool{...}, Floors: [4]bool{...}}, // <kind> r<r> c<c> [...]
-}
+```yaml
+tiles:
+  - id: 0
+    source: base
+    row: 0
+    col: 0
+    doors:  [true, true, true, true]
+    floors: [false, true, false, false]
+    name_cn: ""
+    name_en: ""
+    note: "base r0 c0 (manual: upper-floor anchor)"
+  ...
 ```
 
 总计：base 44 + extension 19 + starter 3 = **66 个有效地块**。抽样校验：
@@ -590,15 +631,15 @@ assets/
   chars/         阶段 2
   monsters/      阶段 6
   fonts/         阶段 8
-  doors_gen.go   ✅
+  datafs/        ✅ (tile_meta.yaml + 6 份 yaml)
   image.go       ✅
 ```
 
 ### C.2 测试 / 命令
 
 ```bash
-# 重新生成地块元数据（已有）
-go run ./cmd/gendoors > assets/doors_gen.go
+# 重新生成地块元数据（写 assets/datafs/tile_meta.yaml；保留 name_cn/name_en/start_cell）
+go run ./cmd/gendoors
 
 # 阶段 1 起每个 cmd 都遵循"幂等 + 不依赖运行时 ebiten"
 go run ./cmd/genmeta
@@ -622,7 +663,8 @@ go test ./pkg/...
 
 ### C.4 任务清单（按阶段聚合）
 
-- 阶段 1：[ ] genmeta [ ] gencards [ ] data/loader.go [ ] cards.yaml [ ] rooms.yaml [ ] omens.yaml [ ] scenarios_index.yaml
+- 阶段 1：[x] gendoors 副产 tile_meta.yaml [x] genmeta（monsters / tts_index）[x] genxls（omens / scenarios_index）[x] genrooms（rooms.yaml，45 条带规则房间）[x] gendoc（rooms_doc.yaml，43 名·类型）[x] pkg/data + 7 测试 [x] yaml.v3 / extrame/xls / ledongthuc/pdf 提为 direct [x] assets/image.go 接入 yaml + HUD hover 显示房名（CN 需阶段 8 接入 CJK 字体后可见）  
+  下一子任务：[ ] 手填 tile_meta.yaml 剩余 ~62 条 name_cn/name_en（可从 rooms.yaml 拼出 45 条）[ ] gencards（待图片尺寸探测方案）[ ] genchars [ ] doc → cards.yaml / tokens.yaml（LibreOffice headless 转 docx 后用 unioffice）
 - 阶段 2：[ ] genchars [ ] characters.yaml [ ] player 升级 [ ] turn engine [ ] setup scene [ ] HUD 属性面板
 - 阶段 3：[ ] dice [ ] dialog/dice.go [ ] stepsLeft 接入
 - 阶段 4：[ ] cards 包 [ ] effects 解释器 [ ] haunt.go [ ] dialog/card.go [ ] tile triggers

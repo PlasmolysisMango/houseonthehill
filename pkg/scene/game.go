@@ -2,6 +2,7 @@ package scene
 
 import (
 	"fmt"
+	"image"
 	"image/color"
 	"math"
 	"time"
@@ -53,6 +54,9 @@ type GameScene struct {
 	pressX, pressY int
 	dragged        bool
 
+	// HUD draw-room button (recomputed every frame in drawHUD).
+	drawBtn image.Rectangle
+
 	// transient hint
 	hintMsg     string
 	hintExpires time.Time
@@ -87,22 +91,18 @@ func NewGameScene(useExtension bool, screenW, screenH int) (*GameScene, error) {
 		state:   stateIdle,
 	}
 
-	// Place starter rooms in a vertical column matching the original game's
-	// layout: Entrance Hall at the bottom (y=0), Foyer above it (y=-1) and
-	// Grand Staircase at the top (y=-2). The starter image is laid out
-	// left-to-right as [staircase, foyer, entrance], so we map by index.
-	starterCells := []board.Cell{
-		{X: 0, Y: -2}, // index 0 -> Grand Staircase
-		{X: 0, Y: -1}, // index 1 -> Foyer
-		{X: 0, Y: 0},  // index 2 -> Entrance Hall
-	}
-	for i, t := range starters {
-		if i >= len(starterCells) {
-			break
+	// Place starter rooms at the cells listed in tile_meta.yaml's
+	// start_cell field. The Entrance Hall (id 1002) becomes the player's
+	// spawn cell; if it is missing we fall back to (0,0).
+	spawn := board.Cell{X: 0, Y: 0}
+	for _, p := range starters {
+		cell := board.Cell{X: p.X, Y: p.Y}
+		g.board.Place(cell, component.NewRoom(p.Tile))
+		if p.Tile.ID == 1002 {
+			spawn = cell
 		}
-		g.board.Place(starterCells[i], component.NewRoom(t))
 	}
-	g.player = player.New(board.Cell{X: 0, Y: 0})
+	g.player = player.New(spawn)
 
 	// centre camera on player's tile centre
 	g.cam.CenterOn(float64(g.player.Pos.X)*TileSize+TileSize/2,
@@ -110,7 +110,7 @@ func NewGameScene(useExtension bool, screenW, screenH int) (*GameScene, error) {
 	// fit comfortably: scale so a tile is about 200px on screen
 	g.cam.Scale = 200.0 / TileSize
 
-	g.flash("Click an adjacent cell to move or draw a room.")
+	g.flash("Click an adjacent cell to move or draw a room. Or press D / click Draw.")
 	return g, nil
 }
 
@@ -128,6 +128,7 @@ func (g *GameScene) Update() (Scene, error) {
 	}
 
 	g.cam.Update(g.mouse)
+	g.layoutDrawButton()
 
 	// click vs drag detection on the left button
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
@@ -145,6 +146,20 @@ func (g *GameScene) Update() (Scene, error) {
 	cx, cy := ebiten.CursorPosition()
 	wx, wy := g.cam.ScreenToWorld(cx, cy)
 	hover := worldToCell(wx, wy)
+
+	// HUD button + keyboard shortcut for the "draw a room" action. They
+	// pick the first cardinal neighbour that has a door from the current
+	// room and is currently empty, then enter stateDrawing as if the user
+	// had clicked that yellow-highlighted cell.
+	hudPoint := image.Point{X: cx, Y: cy}
+	hudClicked := clicked && hudPoint.In(g.drawBtn)
+	if g.state == stateIdle && (inpututil.IsKeyJustPressed(ebiten.KeyD) || hudClicked) {
+		g.tryDrawAtCandidate()
+		if hudClicked {
+			// Consume the click so it can't also fire as a board move.
+			return g, nil
+		}
+	}
 
 	switch g.state {
 	case stateIdle:
@@ -273,6 +288,23 @@ func (g *GameScene) drawHUD(screen *ebiten.Image) {
 		state, g.deck.Remaining(), g.player.Pos.X, g.player.Pos.Y, len(g.board.All()))
 	ebitenutil.DebugPrintAt(screen, hud, 8, 6)
 
+	// hover-room line: shows the names from tile_meta.yaml. CJK glyphs
+	// cannot be rendered by the built-in debug font; once a CJK face is
+	// wired in (roadmap stage 8) the same string will show 中文.
+	cx, cy := ebiten.CursorPosition()
+	wx, wy := g.cam.ScreenToWorld(cx, cy)
+	if room, ok := g.board.At(worldToCell(wx, wy)); ok && room != nil {
+		ebitenutil.DebugPrintAt(screen, "Hover: "+roomLabel(room.Tile), 8, 48)
+	}
+
+	// Draw-room button (top-right). Only enabled in stateIdle so the user
+	// can't accidentally throw away the in-flight tile while orienting it.
+	g.layoutDrawButton()
+	hover := image.Point{X: cx, Y: cy}.In(g.drawBtn)
+	enabled := g.state == stateIdle && g.deck.Remaining() > 0 && g.drawCandidate() != nil
+	label := fmt.Sprintf("Draw [D] (%d)", g.deck.Remaining())
+	drawHUDButton(screen, g.drawBtn, label, hover, enabled)
+
 	// bottom hint
 	if time.Now().Before(g.hintExpires) && g.hintMsg != "" {
 		vector.DrawFilledRect(screen, 0, float32(g.screenH-28), float32(g.screenW), 28, color.RGBA{R: 0, G: 0, B: 0, A: 160}, false)
@@ -280,9 +312,106 @@ func (g *GameScene) drawHUD(screen *ebiten.Image) {
 	}
 
 	// help line
-	help := "L-click adj cell: move/draw   Drag: pan   Wheel: zoom   Mid-click: reset   In drawing: R rotate, F flip, Esc cancel"
+	help := "L-click adj cell: move/draw   D / Draw button: pick a yellow neighbour   Drag: pan   Wheel: zoom   Mid-click: reset   In drawing: R rotate, F flip, Esc cancel"
 	vector.DrawFilledRect(screen, 0, 28, float32(g.screenW), 18, color.RGBA{R: 0, G: 0, B: 0, A: 120}, false)
 	ebitenutil.DebugPrintAt(screen, help, 8, 30)
+}
+
+// layoutDrawButton recomputes the HUD draw-button rectangle. Called every
+// frame so window resizes are picked up automatically.
+func (g *GameScene) layoutDrawButton() {
+	const bw, bh = 180, 32
+	x := g.screenW - bw - 12
+	y := 4
+	g.drawBtn = image.Rect(x, y, x+bw, y+bh)
+}
+
+// drawCandidate returns the first cardinal neighbour of the player that has
+// a door (from the player's room) AND is currently empty—i.e. exactly the
+// cell that would yellow-highlight in Draw(). Returns nil when no candidate
+// exists (e.g. all neighbours are walls or already filled).
+func (g *GameScene) drawCandidate() *board.Cell {
+	curRoom, _ := g.board.At(g.player.Pos)
+	if curRoom == nil {
+		return nil
+	}
+	for i, n := range g.board.Neighbors(g.player.Pos) {
+		if !curRoom.Tile.HasDoor(i) {
+			continue
+		}
+		if _, occupied := g.board.At(n); occupied {
+			continue
+		}
+		cell := n
+		return &cell
+	}
+	return nil
+}
+
+// tryDrawAtCandidate is the shared implementation used by both the D
+// keyboard shortcut and the HUD Draw button. It picks the first valid
+// adjacent empty cell, draws a tile, and enters stateDrawing.
+func (g *GameScene) tryDrawAtCandidate() {
+	if g.state != stateIdle {
+		return
+	}
+	cell := g.drawCandidate()
+	if cell == nil {
+		g.flash("No empty doorway from this room.")
+		return
+	}
+	side, ok := sideFromDelta(g.player.Pos, *cell)
+	if !ok {
+		return
+	}
+	t := g.deck.Draw()
+	if t == nil {
+		g.flash("Deck is empty.")
+		return
+	}
+	g.drawn = t
+	g.target = *cell
+	g.entrySide = tile.OppositeSide(side)
+	g.useFront = true
+	g.state = stateDrawing
+	g.autoOrientDrawn()
+	g.flash("R rotate, click to confirm (door must face you), Esc cancel.")
+}
+
+// drawHUDButton paints a HUD-style flat button. enabled=false greys it.
+func drawHUDButton(dst *ebiten.Image, r image.Rectangle, label string, hover, enabled bool) {
+	bg := color.RGBA{R: 60, G: 56, B: 70, A: 220}
+	border := color.RGBA{R: 220, G: 200, B: 180, A: 255}
+	textCol := color.RGBA{R: 240, G: 240, B: 240, A: 255}
+	switch {
+	case !enabled:
+		bg = color.RGBA{R: 40, G: 40, B: 44, A: 200}
+		border = color.RGBA{R: 90, G: 90, B: 90, A: 255}
+		textCol = color.RGBA{R: 130, G: 130, B: 130, A: 255}
+	case hover:
+		bg = color.RGBA{R: 90, G: 78, B: 110, A: 230}
+	}
+	x, y, w, h := r.Min.X, r.Min.Y, r.Dx(), r.Dy()
+	vector.DrawFilledRect(dst, float32(x), float32(y), float32(w), float32(h), bg, false)
+	vector.StrokeRect(dst, float32(x), float32(y), float32(w), float32(h), 2, border, false)
+	tx := x + w/2 - len(label)*6/2
+	ty := y + h/2 - 8
+	_ = textCol // ebitenutil prints in white; kept for future custom font
+	ebitenutil.DebugPrintAt(dst, label, tx, ty)
+}
+
+// roomLabel formats a tile's names for the HUD. We always include the EN
+// name + id (ASCII-renderable today) and append CN when set so the same
+// call site automatically gains 中文 once a CJK font face is wired in.
+func roomLabel(t *tile.RoomTile) string {
+	en := t.NameEN
+	if en == "" {
+		en = "(unnamed)"
+	}
+	if t.NameCN != "" {
+		return fmt.Sprintf("%s / %s [#%d]", t.NameCN, en, t.ID)
+	}
+	return fmt.Sprintf("%s [#%d]", en, t.ID)
 }
 
 // helpers

@@ -41,6 +41,13 @@ type RoomTile struct {
 	Back     *ebiten.Image
 	Rotation int // 0..3, each unit = 90 degrees clockwise
 
+	// NameCN/NameEN are the human-readable room names sourced from
+	// assets/datafs/tile_meta.yaml. They are empty when the yaml row has
+	// not been filled in yet, in which case callers should fall back to
+	// the tile ID.
+	NameCN string
+	NameEN string
+
 	// Doors holds whether the tile has a door on each original side
 	// (rotation==0). Index order matches the Side* constants.
 	Doors [4]bool

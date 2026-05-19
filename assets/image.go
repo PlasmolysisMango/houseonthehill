@@ -7,9 +7,12 @@ import (
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
+	"sync"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
+	"github.com/plasmolysismango/houseonthehill/assets/datafs"
+	"github.com/plasmolysismango/houseonthehill/pkg/data"
 	"github.com/plasmolysismango/houseonthehill/pkg/tile"
 )
 
@@ -22,7 +25,7 @@ const (
 )
 
 // TileMeta is the static, rotation-independent description of a room tile.
-// It is populated by the generated tileMeta map (see doors_gen.go).
+// It is populated lazily from assets/datafs/tile_meta.yaml on first use.
 //   Doors  side order: [up, right, down, left] (matches tile.Side*).
 //   Floors order:      [roof, upper, ground, basement] (matches tile.Floor*).
 type TileMeta struct {
@@ -32,6 +35,79 @@ type TileMeta struct {
 
 //go:embed image
 var imageAssets embed.FS
+
+// tileCache holds everything we read out of tile_meta.yaml so the runtime
+// only parses the yaml once. Geometry (Doors/Floors) used to live in the
+// hand-generated assets/doors_gen.go file; that file has been removed and
+// the yaml is now the single source of truth.
+type tileCacheEntry struct {
+	Meta      TileMeta
+	NameCN    string
+	NameEN    string
+	StartCell *[2]int
+}
+
+var (
+	tileCacheOnce sync.Once
+	tileCache     map[int]tileCacheEntry
+)
+
+func loadTileCache() map[int]tileCacheEntry {
+	tileCacheOnce.Do(func() {
+		tileCache = map[int]tileCacheEntry{}
+		rows, err := data.LoadTiles(datafs.FS)
+		if err != nil {
+			// Missing yaml is fatal: without it we have no door /
+			// floor data at all. Surface to the loader callers via
+			// empty map; LoadStarterTiles / loadDeckTiles will skip
+			// every tile and the game scene will report no rooms.
+			return
+		}
+		for _, r := range rows {
+			var cell *[2]int
+			if r.StartCell != nil {
+				copy := *r.StartCell
+				cell = &copy
+			}
+			tileCache[r.ID] = tileCacheEntry{
+				Meta:      TileMeta{Doors: r.Doors, Floors: r.Floors},
+				NameCN:    r.NameCN,
+				NameEN:    r.NameEN,
+				StartCell: cell,
+			}
+		}
+	})
+	return tileCache
+}
+
+func tileMetaOf(id int) (TileMeta, bool) {
+	e, ok := loadTileCache()[id]
+	if !ok {
+		return TileMeta{}, false
+	}
+	return e.Meta, true
+}
+
+func tileNames() map[int]struct{ CN, EN string } {
+	cache := loadTileCache()
+	out := make(map[int]struct{ CN, EN string }, len(cache))
+	for id, e := range cache {
+		out[id] = struct{ CN, EN string }{CN: e.NameCN, EN: e.NameEN}
+	}
+	return out
+}
+
+func starterCells() map[int][2]int {
+	cache := loadTileCache()
+	out := map[int][2]int{}
+	for id, e := range cache {
+		if e.StartCell == nil {
+			continue
+		}
+		out[id] = *e.StartCell
+	}
+	return out
+}
 
 // LoadImage decodes an embedded image file into an *ebiten.Image.
 func LoadImage(name string) (*ebiten.Image, error) {
@@ -65,29 +141,50 @@ func cropGrid(img *ebiten.Image, cols, rows int) []*ebiten.Image {
 	return out
 }
 
-// LoadStarterTiles returns the three pre-placed entrance rooms.
-// They are always shown face-up so Front == Back. The image is laid out
-// left-to-right as: [0] Grand Staircase, [1] Foyer, [2] Entrance Hall.
-func LoadStarterTiles() ([]*tile.RoomTile, error) {
+// StarterPlacement bundles a starter tile with the board cell it should be
+// placed on. The cell is sourced from `start_cell` in tile_meta.yaml so the
+// runtime never hard-codes entrance coordinates.
+type StarterPlacement struct {
+	Tile *tile.RoomTile
+	X, Y int
+}
+
+// LoadStarterTiles returns the three pre-placed entrance rooms paired with
+// their target board cells. They are always shown face-up so Front == Back.
+// The image is laid out left-to-right as: [0] Grand Staircase, [1] Foyer,
+// [2] Entrance Hall.
+func LoadStarterTiles() ([]StarterPlacement, error) {
 	img, err := LoadImage(EntryGround)
 	if err != nil {
 		return nil, err
 	}
 	imgs := cropGrid(img, 3, 1)
-	out := make([]*tile.RoomTile, 0, len(imgs))
+	cells := starterCells()
+	out := make([]StarterPlacement, 0, len(imgs))
 	for i, im := range imgs {
 		id := 1000 + i
-		meta, ok := tileMeta[id]
+		meta, ok := tileMetaOf(id)
 		if !ok {
 			continue
 		}
-		out = append(out, &tile.RoomTile{
-			ID:     id,
-			Source: tile.SourceStarter,
-			Front:  im,
-			Back:   im,
-			Doors:  meta.Doors,
-			Floors: meta.Floors,
+		cell, ok := cells[id]
+		if !ok {
+			return nil, fmt.Errorf("starter tile %d missing start_cell in tile_meta.yaml", id)
+		}
+		name := tileNames()[id]
+		out = append(out, StarterPlacement{
+			Tile: &tile.RoomTile{
+				ID:     id,
+				Source: tile.SourceStarter,
+				Front:  im,
+				Back:   im,
+				NameCN: name.CN,
+				NameEN: name.EN,
+				Doors:  meta.Doors,
+				Floors: meta.Floors,
+			},
+			X: cell[0],
+			Y: cell[1],
 		})
 	}
 	return out, nil
@@ -110,16 +207,19 @@ func loadDeckTiles(frontName, backName string, cols, rows int, idBase int, src t
 	out := make([]*tile.RoomTile, 0, len(frontTiles))
 	for i := range frontTiles {
 		id := idBase + i
-		meta, ok := tileMeta[id]
+		meta, ok := tileMetaOf(id)
 		if !ok {
 			// Pre-generated table omits blank/doorless cells, so skip them.
 			continue
 		}
+		name := tileNames()[id]
 		out = append(out, &tile.RoomTile{
 			ID:     id,
 			Source: src,
 			Front:  frontTiles[i],
 			Back:   backTiles[i],
+			NameCN: name.CN,
+			NameEN: name.EN,
 			Doors:  meta.Doors,
 			Floors: meta.Floors,
 		})
