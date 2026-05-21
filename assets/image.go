@@ -12,6 +12,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/plasmolysismango/houseonthehill/assets/datafs"
+	"github.com/plasmolysismango/houseonthehill/pkg/cards"
 	"github.com/plasmolysismango/houseonthehill/pkg/data"
 	"github.com/plasmolysismango/houseonthehill/pkg/tile"
 )
@@ -95,6 +96,30 @@ func tileNames() map[int]struct{ CN, EN string } {
 		out[id] = struct{ CN, EN string }{CN: e.NameCN, EN: e.NameEN}
 	}
 	return out
+}
+
+// RoomRule returns the special rule text for a named room (matched by
+// English name). Rooms without special rules return an empty string.
+// The data is loaded lazily from rooms.yaml on first call.
+var (
+	roomRulesOnce sync.Once
+	roomRulesMap  map[string]string
+)
+
+func RoomRule(nameEN string) string {
+	roomRulesOnce.Do(func() {
+		roomRulesMap = make(map[string]string)
+		rooms, err := data.LoadRooms(datafs.FS)
+		if err != nil {
+			return
+		}
+		for _, r := range rooms {
+			if r.RuleText != "" {
+				roomRulesMap[r.NameEN] = r.RuleText
+			}
+		}
+	})
+	return roomRulesMap[nameEN]
 }
 
 func starterCells() map[int][2]int {
@@ -228,6 +253,13 @@ func loadDeckTiles(frontName, backName string, cols, rows int, idBase int, src t
 }
 
 // LoadBaseDeck loads the base game's 50 explorable rooms (10 columns x 5 rows).
+// LoadCharacters reads assets/datafs/characters.yaml and returns the
+// 12 explorer cards (with stat tracks and colour). Thin wrapper around
+// data.LoadCharacters that hides the embed.FS detail from callers.
+func LoadCharacters() ([]data.Character, error) {
+	return data.LoadCharacters(datafs.FS)
+}
+
 func LoadBaseDeck() ([]*tile.RoomTile, error) {
 	return loadDeckTiles(MainMap, MainMapBack, 10, 5, 0, tile.SourceBase)
 }
@@ -235,4 +267,35 @@ func LoadBaseDeck() ([]*tile.RoomTile, error) {
 // LoadExtensionDeck loads the DLC's 20 explorable rooms (10 columns x 2 rows).
 func LoadExtensionDeck() ([]*tile.RoomTile, error) {
 	return loadDeckTiles(ExtendMap, ExtendMapBack, 10, 2, 500, tile.SourceExtension)
+}
+
+// LoadCards parses cards.yaml and returns the three pre-bucketed slices
+// (events, items, omens). The runtime then wraps each with a seeded Deck.
+func LoadCards() (events, items, omens []*cards.Card, err error) {
+	return cards.LoadAll(datafs.FS)
+}
+
+// roomKindMap is a name_cn → kind index built from rooms_doc.yaml.
+// kind values are: "event" / "omen" / "item" / "base" / "unknown".
+var (
+	roomKindOnce sync.Once
+	roomKindMap  map[string]string
+)
+
+// RoomKindOf returns the trigger kind for a room identified by its
+// Chinese name. Empty string when the room is not in rooms_doc.yaml.
+// Used by the game scene to decide which deck to draw from when a
+// player first enters a tile.
+func RoomKindOf(nameCN string) string {
+	roomKindOnce.Do(func() {
+		roomKindMap = make(map[string]string)
+		rows, err := data.LoadRoomsDoc(datafs.FS)
+		if err != nil {
+			return
+		}
+		for _, r := range rows {
+			roomKindMap[r.NameCN] = r.Kind
+		}
+	})
+	return roomKindMap[nameCN]
 }

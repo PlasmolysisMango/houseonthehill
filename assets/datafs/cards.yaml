@@ -1,0 +1,243 @@
+# Placeholder card data for ROADMAP stage 4. The eventual full deck will
+# be extracted from the rulebook PDF / docs in stage 1; this seed file
+# keeps the runtime exercisable end-to-end (draw → resolve → log).
+#
+# Schema:
+#   id        unique within a deck
+#   name_cn   localized display title
+#   name_en   English display title
+#   kind      event | item | omen
+#   text      one paragraph of flavour / rule text shown in the modal
+#   effects   optional list of resolvable effects:
+#               kind: stat_shift | manual
+#               target: self | all     (default self)
+#               stat:   might | speed | sanity | knowledge
+#               delta:  signed integer
+#               note:   for manual: short hint shown in the log
+#
+# Cards without effects show the text only and the player resolves them.
+
+events:
+  - id: 1
+    name_cn: "神秘的羊皮卷"
+    name_en: "Mystic Scroll"
+    kind: event
+    text: "你研读了神秘的羊皮卷。知识 +1。"
+    effects:
+      - { kind: stat_shift, target: self, stat: knowledge, delta: 1 }
+
+  - id: 2
+    name_cn: "突如其来的眩晕"
+    name_en: "Sudden Dizziness"
+    kind: event
+    text: "天旋地转。神志 -1。"
+    effects:
+      - { kind: stat_shift, target: self, stat: sanity, delta: -1 }
+
+  - id: 3
+    name_cn: "强身的早餐"
+    name_en: "Hearty Breakfast"
+    kind: event
+    text: "你吃了一顿丰盛的早餐。强壮 +1。"
+    effects:
+      - { kind: stat_shift, target: self, stat: might, delta: 1 }
+
+  - id: 4
+    name_cn: "扭伤的脚踝"
+    name_en: "Twisted Ankle"
+    kind: event
+    text: "脚下打滑。速度 -1。"
+    effects:
+      - { kind: stat_shift, target: self, stat: speed, delta: -1 }
+
+  - id: 5
+    name_cn: "突破"
+    name_en: "Breakthrough"
+    kind: event
+    text: "灵光乍现，所有玩家知识 +1。"
+    effects:
+      - { kind: stat_shift, target: all, stat: knowledge, delta: 1 }
+
+  - id: 6
+    name_cn: "尖叫声"
+    name_en: "Distant Scream"
+    kind: event
+    text: "远处传来一声尖叫。所有玩家神志 -1。"
+    effects:
+      - { kind: stat_shift, target: all, stat: sanity, delta: -1 }
+
+  - id: 7
+    name_cn: "迷失方向"
+    name_en: "You Lose Your Way"
+    kind: event
+    text: "你在走廊里迷失了方向。本回合结束剩余移动力。"
+    effects:
+      - { kind: manual, note: "本回合剩余移动力归零" }
+
+  - id: 8
+    name_cn: "古老的画作"
+    name_en: "Ancient Painting"
+    kind: event
+    text: "画中的眼睛在动。掷一颗骰子：≥1 → 知识 +1，否则 → 神志 -1。"
+    effects:
+      - { kind: manual, note: "玩家自掷一颗骰子裁决" }
+
+items:
+  - id: 101
+    name_cn: "急救包"
+    name_en: "First Aid Kit"
+    kind: item
+    text: "保留这张牌。一次性使用：强壮 +2。"
+    effects:
+      - { kind: manual, note: "持有，使用时强壮 +2" }
+
+  - id: 102
+    name_cn: "护身符"
+    name_en: "Talisman"
+    kind: item
+    text: "保留这张牌。一次性使用：神志 +2。"
+    effects:
+      - { kind: manual, note: "持有，使用时神志 +2" }
+
+  - id: 103
+    name_cn: "圣经"
+    name_en: "Bible"
+    kind: item
+    text: "保留这张牌。掷预兆检定时多掷一颗骰。"
+    effects:
+      - { kind: manual, note: "持有；预兆检定 +1 骰" }
+
+  - id: 104
+    name_cn: "短剑"
+    name_en: "Dagger"
+    kind: item
+    text: "保留这张牌。战斗中强壮检定 +1 骰。"
+    effects:
+      - { kind: manual, note: "持有；战斗 +1 骰" }
+
+  - id: 105
+    name_cn: "兔脚"
+    name_en: "Lucky Rabbit's Foot"
+    kind: item
+    text: "保留这张牌。一次性使用：重投任意一次检定。"
+    effects:
+      - { kind: manual, note: "持有；可重投一次检定" }
+
+  - id: 106
+    name_cn: "弯曲钥匙"
+    name_en: "Bent Key"
+    kind: item
+    text: "保留这张牌。一次性使用：忽略一扇紧闭的门。"
+    effects:
+      - { kind: manual, note: "持有；忽略一扇门" }
+
+# 13 omens, one card per name from omens.yaml. All omens are kept
+# face-up in front of the drawing player and trigger a Haunt Roll.
+omens:
+  - id: 201
+    name_cn: "噬咬"
+    name_en: "Bite"
+    kind: omen
+    text: "保留。携带噬咬时，你可在战斗中获得 +1 骰。"
+    effects:
+      - { kind: manual, note: "持有：战斗 +1 骰" }
+
+  - id: 202
+    name_cn: "书本"
+    name_en: "Book"
+    kind: omen
+    text: "保留。立即知识 +1。"
+    effects:
+      - { kind: stat_shift, target: self, stat: knowledge, delta: 1 }
+
+  - id: 203
+    name_cn: "水晶球"
+    name_en: "Crystal Ball"
+    kind: omen
+    text: "保留。一次性使用：偷看任意一张抽过的牌。"
+    effects:
+      - { kind: manual, note: "持有；偷看一张抽过的牌" }
+
+  - id: 204
+    name_cn: "脏狗"
+    name_en: "Dog"
+    kind: omen
+    text: "脏狗成为你的同伴。所有检定中将其作为额外角色棋子。"
+    effects:
+      - { kind: manual, note: "获得脏狗同伴" }
+
+  - id: 205
+    name_cn: "女孩"
+    name_en: "Girl"
+    kind: omen
+    text: "你遇见一个孤单的小女孩。她跟随着你。"
+    effects:
+      - { kind: manual, note: "获得女孩同伴" }
+
+  - id: 206
+    name_cn: "圣符"
+    name_en: "Holy Symbol"
+    kind: omen
+    text: "保留。神志检定时多掷一颗骰。"
+    effects:
+      - { kind: manual, note: "持有；神志检定 +1 骰" }
+
+  - id: 207
+    name_cn: "疯汉"
+    name_en: "Madman"
+    kind: omen
+    text: "疯汉跟随着你，喃喃自语。每回合开始神志 -1。"
+    effects:
+      - { kind: per_turn, target: self, stat: sanity, delta: -1 }
+      - { kind: manual, note: "持有；每回合开始神志 -1" }
+
+  - id: 208
+    name_cn: "面具"
+    name_en: "Mask"
+    kind: omen
+    text: "戴上面具。立即知识 -1，但本回合移动 +1。"
+    effects:
+      - { kind: stat_shift, target: self, stat: knowledge, delta: -1 }
+      - { kind: manual, note: "本回合移动 +1" }
+
+  - id: 209
+    name_cn: "徽章"
+    name_en: "Medallion"
+    kind: omen
+    text: "保留。一次性使用：避开一次伤害。"
+    effects:
+      - { kind: manual, note: "持有；避开一次伤害" }
+
+  - id: 210
+    name_cn: "戒指"
+    name_en: "Ring"
+    kind: omen
+    text: "戴上戒指。立即神志 -1，强壮 +1。"
+    effects:
+      - { kind: stat_shift, target: self, stat: sanity, delta: -1 }
+      - { kind: stat_shift, target: self, stat: might, delta: 1 }
+
+  - id: 211
+    name_cn: "颅骨"
+    name_en: "Skull"
+    kind: omen
+    text: "你拾起一具颅骨。所有玩家神志 -1。"
+    effects:
+      - { kind: stat_shift, target: all, stat: sanity, delta: -1 }
+
+  - id: 212
+    name_cn: "长矛"
+    name_en: "Spear"
+    kind: omen
+    text: "保留。战斗中强壮检定 +2 骰。"
+    effects:
+      - { kind: manual, note: "持有；战斗 +2 骰" }
+
+  - id: 213
+    name_cn: "灵板"
+    name_en: "Spirit Board"
+    kind: omen
+    text: "灵板与亡魂沟通。立即知识 +1，神志 -1。"
+    effects:
+      - { kind: stat_shift, target: self, stat: knowledge, delta: 1 }
+      - { kind: stat_shift, target: self, stat: sanity, delta: -1 }
