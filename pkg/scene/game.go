@@ -159,7 +159,7 @@ func NewGameScene(useExtension bool, screenW, screenH int, picks []data.Characte
 	// fit comfortably: scale so a tile is about 200px on screen
 	g.cam.Scale = 200.0 / TileSize
 
-	g.flash("Click an adjacent cell to move or draw a room. Or press D / click Draw. E ends turn.")
+	g.flash("点击相邻格子移动或抽取房间。 D / 抽牌按钮 抽取， E 结束回合。")
 	return g, nil
 }
 
@@ -209,15 +209,36 @@ func (g *GameScene) curPos() board.Cell {
 }
 
 // playerLabel returns a short identifier for HUD lines, preferring the
-// English character name and falling back to a numeric seat tag.
+// Chinese character name and falling back to the English name or a numeric
+// seat tag.
 func playerLabel(p *player.Player) string {
 	if p == nil {
 		return "--"
 	}
-	if p.Char != nil && p.Char.NameEN != "" {
-		return p.Char.NameEN
+	if p.Char != nil {
+		if p.Char.NameCN != "" {
+			return p.Char.NameCN
+		}
+		if p.Char.NameEN != "" {
+			return p.Char.NameEN
+		}
 	}
 	return fmt.Sprintf("P%d", p.ID)
+}
+
+// phaseLabel maps a turn.Phase to its Chinese display label for the HUD.
+func phaseLabel(p turn.Phase) string {
+	switch p {
+	case turn.PhaseStart:
+		return "起始"
+	case turn.PhaseMove:
+		return "移动"
+	case turn.PhaseAction:
+		return "行动"
+	case turn.PhaseEnd:
+		return "结束"
+	}
+	return p.String()
 }
 
 // speedOf returns the player's current Speed stat value, or 0 when p is
@@ -288,9 +309,9 @@ func (g *GameScene) Update() (Scene, error) {
 			g.onTurnStart(cur)
 			g.cam.CenterOn(float64(cur.Pos.X)*TileSize+TileSize/2,
 				float64(cur.Pos.Y)*TileSize+TileSize/2)
-			g.flash(fmt.Sprintf("Turn: %s   Speed %d", playerLabel(cur), g.engine.StepsLeft()))
+			g.flash(fmt.Sprintf("回合开始：%s   移动点数 %d", playerLabel(cur), g.engine.StepsLeft()))
 		} else {
-			g.flash("Game over.")
+			g.flash("游戏结束。")
 		}
 		if endClicked {
 			return g, nil
@@ -379,7 +400,7 @@ func (g *GameScene) Update() (Scene, error) {
 		case inpututil.IsKeyJustPressed(ebiten.KeyG):
 			// Pick up dropped cards at the current cell.
 			if g.pickupDropped(cur) {
-				g.flash(fmt.Sprintf("%s picked up dropped cards!", playerLabel(cur)))
+				g.flash(fmt.Sprintf("%s 拾起了掉落的卡片！", playerLabel(cur)))
 			}
 		}
 	}
@@ -397,20 +418,20 @@ func (g *GameScene) Update() (Scene, error) {
 		switch {
 		case inpututil.IsKeyJustPressed(ebiten.KeyDigit1):
 			cur.Shift(player.Might, delta)
-			g.flash(fmt.Sprintf("%s Might %+d\u2192%d", playerLabel(cur), delta, cur.StatValue(player.Might)))
+			g.flash(fmt.Sprintf("%s 强壮 %+d→%d", playerLabel(cur), delta, cur.StatValue(player.Might)))
 		case inpututil.IsKeyJustPressed(ebiten.KeyDigit2):
 			cur.Shift(player.Speed, delta)
-			g.flash(fmt.Sprintf("%s Speed %+d\u2192%d", playerLabel(cur), delta, cur.StatValue(player.Speed)))
+			g.flash(fmt.Sprintf("%s 迅捷 %+d→%d", playerLabel(cur), delta, cur.StatValue(player.Speed)))
 		case inpututil.IsKeyJustPressed(ebiten.KeyDigit3):
 			cur.Shift(player.Sanity, delta)
-			g.flash(fmt.Sprintf("%s Sanity %+d\u2192%d", playerLabel(cur), delta, cur.StatValue(player.Sanity)))
+			g.flash(fmt.Sprintf("%s 神志 %+d→%d", playerLabel(cur), delta, cur.StatValue(player.Sanity)))
 		case inpututil.IsKeyJustPressed(ebiten.KeyDigit4):
 			cur.Shift(player.Knowledge, delta)
-			g.flash(fmt.Sprintf("%s Knowledge %+d\u2192%d", playerLabel(cur), delta, cur.StatValue(player.Knowledge)))
+			g.flash(fmt.Sprintf("%s 知识 %+d→%d", playerLabel(cur), delta, cur.StatValue(player.Knowledge)))
 		}
 		if cur.Dead {
 			g.dropInventory(cur)
-			g.flash(playerLabel(cur) + " has died.")
+			g.flash(playerLabel(cur) + " 已死亡。")
 		}
 	}
 
@@ -422,28 +443,39 @@ func (g *GameScene) Update() (Scene, error) {
 				break
 			}
 			curRoom, _ := g.board.At(g.curPos())
-			if curRoom == nil || !curRoom.Tile.HasDoor(side) {
-				g.flash("No door on that side of this room.")
-				break
+			dstRoom, dstExists := g.board.At(hover)
+			// Starter tiles (Grand Staircase / Foyer / Entrance Hall) form
+			// the fixed "Entrance Hall" composite room from the rulebook;
+			// movement between them is always allowed regardless of which
+			// side of the artwork shows a door. Door checks still apply
+			// when stepping out of a starter into a regular tile.
+			starterPair := curRoom != nil && dstExists &&
+				curRoom.Tile.Source == tile.SourceStarter &&
+				dstRoom.Tile.Source == tile.SourceStarter
+			if !starterPair {
+				if curRoom == nil || !curRoom.Tile.HasDoor(side) {
+					g.flash("这一侧没有门。")
+					break
+				}
 			}
 			if g.engine.StepsLeft() <= 0 {
-				g.flash("No moves left this turn. Press E to end turn.")
+				g.flash("本回合移动点数已耗尽。按 E 结束回合。")
 				break
 			}
-			if room, ok := g.board.At(hover); ok {
-				if !room.Tile.HasDoor(tile.OppositeSide(side)) {
-					g.flash("The next room has no door facing here.")
+			if dstExists {
+				if !starterPair && !dstRoom.Tile.HasDoor(tile.OppositeSide(side)) {
+					g.flash("那个房间没有门朝向这边。")
 					break
 				}
 				if cur := g.cur(); cur != nil {
 					cur.Pos = hover
 					// Check for dropped items at the new cell.
 					if len(g.droppedItems[hover]) > 0 {
-						g.flash(fmt.Sprintf("Dropped items here (%d)! Press G to pick up.", len(g.droppedItems[hover])))
+						g.flash(fmt.Sprintf("此格有掉落物品 (%d 张)！按 G 拾取。", len(g.droppedItems[hover])))
 					}
 				}
 				g.engine.SpendStep()
-				g.flash(fmt.Sprintf("Moved.   Steps left: %d", g.engine.StepsLeft()))
+				g.flash(fmt.Sprintf("已移动。   剩余点数：%d", g.engine.StepsLeft()))
 			} else {
 				if t := g.deck.Draw(); t != nil {
 					g.drawn = t
@@ -453,9 +485,9 @@ func (g *GameScene) Update() (Scene, error) {
 					g.state = stateDrawing
 					// auto-rotate so the entry side has a door if possible
 					g.autoOrientDrawn()
-					g.flash("R rotate, click to confirm (door must face you), Esc cancel.")
+					g.flash("R 旋转，点击确认（门必须朝向你），Esc 取消。")
 				} else {
-					g.flash("Deck is empty.")
+					g.flash("牌库已空。")
 				}
 			}
 		}
@@ -470,11 +502,11 @@ func (g *GameScene) Update() (Scene, error) {
 			g.deck.ReturnTop(g.drawn)
 			g.drawn = nil
 			g.state = stateIdle
-			g.flash("Cancelled.")
+			g.flash("已取消。")
 		}
 		if clicked {
 			if !g.drawn.HasDoor(g.entrySide) {
-				g.flash("This rotation has no door facing you. Press R to rotate.")
+				g.flash("当前方向没有门对准你。按 R 旋转。")
 			} else {
 				room := component.NewRoom(g.drawn)
 				room.Revealed = true
@@ -486,7 +518,7 @@ func (g *GameScene) Update() (Scene, error) {
 				placedRoom := room
 				g.drawn = nil
 				g.state = stateIdle
-				g.flash(fmt.Sprintf("Room placed.   Steps left: %d", g.engine.StepsLeft()))
+				g.flash(fmt.Sprintf("房间已放置。   剩余点数：%d", g.engine.StepsLeft()))
 				if placedRoom != nil {
 					g.triggerRoomCard(placedRoom.Tile.NameCN)
 				}
@@ -559,16 +591,16 @@ func (g *GameScene) Draw(screen *ebiten.Image) {
 func (g *GameScene) drawHUD(screen *ebiten.Image) {
 	// top bar
 	vector.DrawFilledRect(screen, 0, 0, float32(g.screenW), 28, color.RGBA{R: 0, G: 0, B: 0, A: 160}, false)
-	state := "IDLE"
+	state := "空闲"
 	if g.state == stateDrawing {
-		state = "DRAWING"
+		state = "抽牌中"
 	}
 	turnLabel := "--"
 	if cur := g.cur(); cur != nil {
 		turnLabel = playerLabel(cur)
 	}
-	hud := fmt.Sprintf("Round %d  Turn: %s [%s]   State: %s   Steps: %d   Omens: %d   Deck: %d left   Pos: (%d,%d)   Rooms: %d",
-		g.engine.Round(), turnLabel, g.engine.Phase().String(),
+	hud := fmt.Sprintf("第%d轮  回合：%s [%s]   状态：%s   点数：%d   预兆：%d   牌库：剩%d   位置：(%d,%d)   房间：%d",
+		g.engine.Round(), turnLabel, phaseLabel(g.engine.Phase()),
 		state, g.engine.StepsLeft(), g.haunt.OmenCount(),
 		g.deck.Remaining(), g.curPos().X, g.curPos().Y, len(g.board.All()))
 	ui.DrawAt(screen, hud, 8, 6)
@@ -579,7 +611,7 @@ func (g *GameScene) drawHUD(screen *ebiten.Image) {
 	cx, cy := ebiten.CursorPosition()
 	wx, wy := g.cam.ScreenToWorld(cx, cy)
 	if room, ok := g.board.At(worldToCell(wx, wy)); ok && room != nil {
-		ui.DrawAt(screen, "Hover: "+roomLabel(room.Tile), 8, 48)
+		ui.DrawAt(screen, "房间："+roomLabel(room.Tile), 8, 48)
 		if rule := assets.RoomRule(room.Tile.NameEN); rule != "" {
 			// rule_text is CJK; once a CJK font is wired in it will
 			// render automatically. For now show a truncated snippet.
@@ -587,7 +619,7 @@ func (g *GameScene) drawHUD(screen *ebiten.Image) {
 			if len([]rune(snippet)) > 60 {
 				snippet = string([]rune(snippet)[:60]) + "..."
 			}
-			ui.DrawAt(screen, "Effect: "+snippet, 8, 64)
+			ui.DrawAt(screen, "效果："+snippet, 8, 64)
 		}
 	}
 
@@ -597,13 +629,13 @@ func (g *GameScene) drawHUD(screen *ebiten.Image) {
 	g.layoutEndTurnButton()
 	hover := image.Point{X: cx, Y: cy}.In(g.drawBtn)
 	enabled := g.state == stateIdle && g.deck.Remaining() > 0 && g.drawCandidate() != nil
-	label := fmt.Sprintf("Draw [D] (%d)", g.deck.Remaining())
+	label := fmt.Sprintf("抽牌 [D] (%d)", g.deck.Remaining())
 	drawHUDButton(screen, g.drawBtn, label, hover, enabled)
 
 	// End Turn button just below it.
 	endHover := image.Point{X: cx, Y: cy}.In(g.endTurnBtn)
 	endEnabled := g.state == stateIdle && !g.engine.IsGameOver()
-	drawHUDButton(screen, g.endTurnBtn, "End Turn [E]", endHover, endEnabled)
+	drawHUDButton(screen, g.endTurnBtn, "结束回合 [E]", endHover, endEnabled)
 
 	// bottom hint
 	if time.Now().Before(g.hintExpires) && g.hintMsg != "" {
@@ -612,7 +644,7 @@ func (g *GameScene) drawHUD(screen *ebiten.Image) {
 	}
 
 	// help line
-	help := "L-click adj cell: move/draw   D / Draw button: pick a yellow neighbour   T: dice tester   N/I/O: force draw event/item/omen   Drag: pan   Wheel: zoom   Mid-click: reset   In drawing: R rotate, F flip, Esc cancel   In card: A apply, M manual, Esc close"
+	help := "左键点相邻格：移动/抽牌   D / 抽牌按钮：选择黄色邻格   T：骰子测试   N/I/O：强抽 事件/物品/预兆   G：拾取   拖拽：平移   滚轮：缩放   中键：重置   抽牌中：R 旋转 F 翻面 Esc 取消   卡片中：A 应用 M 手动 Esc 关闭"
 	vector.DrawFilledRect(screen, 0, 28, float32(g.screenW), 18, color.RGBA{R: 0, G: 0, B: 0, A: 120}, false)
 	ui.DrawAt(screen, help, 8, 30)
 
@@ -683,13 +715,13 @@ func (g *GameScene) drawStatPanel(dst *ebiten.Image) {
 		color.RGBA{R: 30, G: 30, B: 30, A: 255}, false)
 	title := playerLabel(cur)
 	if cur.Dead {
-		title += "  [DEAD]"
+		title += "  [已死亡]"
 	}
 	ui.DrawAt(dst, title, px+padX+int(swatch)+6, py+padY)
 
 	// four stat rows
 	rowY := py + padY + titleH + rowGap
-	labels := [...]string{"MIG", "SPD", "SAN", "KNW"}
+	labels := [...]string{"强壮", "迅捷", "神志", "知识"}
 	for k := 0; k < player.StatCount; k++ {
 		ui.DrawAt(dst, labels[k], px+padX, rowY+(cellH-12)/2)
 		s := cur.Stats[k]
@@ -777,12 +809,12 @@ func (g *GameScene) tryDrawAtCandidate() {
 		return
 	}
 	if g.engine.StepsLeft() <= 0 {
-		g.flash("No moves left this turn. Press E to end turn.")
+		g.flash("本回合移动点数已耗尽。按 E 结束回合。")
 		return
 	}
 	cell := g.drawCandidate()
 	if cell == nil {
-		g.flash("No empty doorway from this room.")
+		g.flash("这个房间没有空的门。")
 		return
 	}
 	side, ok := sideFromDelta(g.curPos(), *cell)
@@ -791,7 +823,7 @@ func (g *GameScene) tryDrawAtCandidate() {
 	}
 	t := g.deck.Draw()
 	if t == nil {
-		g.flash("Deck is empty.")
+		g.flash("牌库已空。")
 		return
 	}
 	g.drawn = t
@@ -800,7 +832,7 @@ func (g *GameScene) tryDrawAtCandidate() {
 	g.useFront = true
 	g.state = stateDrawing
 	g.autoOrientDrawn()
-	g.flash("R rotate, click to confirm (door must face you), Esc cancel.")
+	g.flash("R 旋转，点击确认（门必须朝向你），Esc 取消。")
 }
 
 // drawHUDButton paints a HUD-style flat button. enabled=false greys it.
@@ -961,18 +993,18 @@ func (g *GameScene) drawDicePanel(dst *ebiten.Image) {
 	vector.StrokeRect(dst, float32(px), float32(py), float32(panelW), float32(panelH), 2,
 		color.RGBA{R: 220, G: 200, B: 180, A: 255}, false)
 
-	title := fmt.Sprintf("Dice tester  (%d \u00d7 d{0,0,1,1,2,2})", g.diceCount)
+	title := fmt.Sprintf("骰子测试  (%d × d{0,0,1,1,2,2})", g.diceCount)
 	ui.DrawAt(dst, title, px+padX, py+padY)
-
+	
 	rowX := px + (panelW-rowW)/2
 	rowY := py + padY + titleH
 	for i, v := range g.diceFaces {
 		x := rowX + i*(dieSize+dieGap)
 		drawDieFace(dst, x, rowY, dieSize, v)
 	}
-
-	total := fmt.Sprintf("Total: %d", g.diceTotal)
-	instr := "1-8 count   R / Space reroll   Esc / T close"
+	
+	total := fmt.Sprintf("总计：%d", g.diceTotal)
+	instr := "1-8 选骰数   R / Space 重投   Esc / T 关闭"
 	ui.DrawAt(dst, total, px+padX, py+panelH-footerH+4)
 	ui.DrawColorAt(dst, instr, px+panelW-len(instr)*ui.GlyphWidth-padX, py+panelH-footerH+4,
 		color.RGBA{R: 200, G: 200, B: 200, A: 255})
@@ -1040,7 +1072,7 @@ func (g *GameScene) openCard(d *cards.Deck) {
 	}
 	c := d.Draw()
 	if c == nil {
-		g.flash(fmt.Sprintf("Deck is empty: %s", d.Kind()))
+		g.flash(fmt.Sprintf("牌库已空：%s", d.Kind()))
 		return
 	}
 	dlg := &cardDialog{card: c, deck: d}
@@ -1049,10 +1081,10 @@ func (g *GameScene) openCard(d *cards.Deck) {
 		sum, n := g.haunt.LastRoll()
 		if triggered {
 			dlg.hauntFire = true
-			dlg.hauntInfo = fmt.Sprintf("HAUNT TRIGGERED!  Roll %d on %dd  <  %d omens",
+			dlg.hauntInfo = fmt.Sprintf("鬼祟触发！骰点 %d (%d骰)  <  %d 个预兆",
 				sum, n, g.haunt.OmenCount())
 		} else {
-			dlg.hauntInfo = fmt.Sprintf("Haunt Roll: %d on %dd   (need < %d) \u2014 safe",
+			dlg.hauntInfo = fmt.Sprintf("鬼祟骰检：%d (%d骰)   （需 < %d）— 安全",
 				sum, n, g.haunt.OmenCount())
 		}
 	}
@@ -1090,7 +1122,7 @@ func (g *GameScene) closeCard() {
 	if dlg.hauntFire {
 		// Stage 5 hook: scenarioID lookup + briefing dispatch.
 		// For now we just flash and log to console.
-		g.flash(fmt.Sprintf("\u26A0  HAUNT TRIGGERED at omen %d \u2014 scenario lookup pending (stage 5)", g.haunt.OmenCount()))
+		g.flash(fmt.Sprintf("⚠  鬼祟在第 %d 个预兆触发 — 剧本加载待实现（阶段5）", g.haunt.OmenCount()))
 		fmt.Printf("[HAUNT] omen %d triggered haunt for player %s\n",
 			g.haunt.OmenCount(), playerLabel(g.cur()))
 	}
@@ -1150,12 +1182,12 @@ func (g *GameScene) drawCardDialog(dst *ebiten.Image) {
 
 	// Top: kind badge.
 	lh := ui.LineHeight()
-	kindLabel := "EVENT"
+	kindLabel := "事件"
 	switch c.Kind {
 	case cards.KindItem:
-		kindLabel = "ITEM"
+		kindLabel = "物品"
 	case cards.KindOmen:
-		kindLabel = "OMEN"
+		kindLabel = "预兆"
 	}
 	ui.DrawColorAt(dst, kindLabel, px+12, py+10, color.RGBA{R: 255, G: 215, B: 100, A: 255})
 
@@ -1183,7 +1215,7 @@ func (g *GameScene) drawCardDialog(dst *ebiten.Image) {
 	// Applied logs.
 	if dlg.applied {
 		bodyY += 6
-		ui.DrawColorAt(dst, "APPLIED:", px+12, bodyY,
+		ui.DrawColorAt(dst, "已应用：", px+12, bodyY,
 			color.RGBA{R: 180, G: 240, B: 180, A: 255})
 		bodyY += lh
 		for _, l := range dlg.appliedLogs {
@@ -1198,19 +1230,19 @@ func (g *GameScene) drawCardDialog(dst *ebiten.Image) {
 	var hint string
 	switch {
 	case c.Kind == cards.KindEvent:
-		hint = "[A] Apply   [M] Manual / Close   [Esc] Discard"
+		hint = "[A] 应用   [M] 手动/关闭   [Esc] 丢弃"
 		if dlg.applied {
-			hint = "[M] / [Esc] Discard"
+			hint = "[M] / [Esc] 丢弃"
 		}
 	case c.Kind == cards.KindItem:
-		hint = "[K/Esc] Keep in bag   [U] Use & discard"
+		hint = "[K/Esc] 收入背包   [U] 使用并丢弃"
 	case c.Kind == cards.KindOmen:
-		hint = "[A] Apply effects   [K/Esc] Keep (omens always held)"
+		hint = "[A] 应用效果   [K/Esc] 保留（预兆始终持有）"
 		if dlg.applied {
-			hint = "[K/Esc] Keep"
+			hint = "[K/Esc] 保留"
 		}
 	default:
-		hint = "[Esc] Close"
+		hint = "[Esc] 关闭"
 	}
 	ui.DrawColorAt(dst, hint, px+12, py+panelH-lh-8,
 		color.RGBA{R: 200, G: 200, B: 200, A: 255})
@@ -1319,7 +1351,7 @@ func (g *GameScene) onTurnStart(p *player.Player) {
 		}
 		if p.Dead {
 			g.dropInventory(p)
-			g.flash(playerLabel(p) + " has died from held card effects.")
+			g.flash(playerLabel(p) + " 因持有卡效果死亡。")
 			break
 		}
 	}
@@ -1361,18 +1393,18 @@ func (g *GameScene) drawInventoryPanel(dst *ebiten.Image) {
 		float32(panelW), float32(panelH), 1,
 		color.RGBA{R: 120, G: 120, B: 140, A: 200}, false)
 
-	ui.DrawColorAt(dst, fmt.Sprintf("Bag (%d)", len(inv)), px+6, py+4,
+	ui.DrawColorAt(dst, fmt.Sprintf("背包 (%d)", len(inv)), px+6, py+4,
 		color.RGBA{R: 200, G: 180, B: 100, A: 255})
 	y := py + 4 + lh
 	for _, c := range inv {
 		var kindTag string
 		switch c.Kind {
 		case cards.KindItem:
-			kindTag = "[I]"
+			kindTag = "[物]"
 		case cards.KindOmen:
-			kindTag = "[O]"
+			kindTag = "[兆]"
 		default:
-			kindTag = "[E]"
+			kindTag = "[事]"
 		}
 		label := kindTag + " " + c.Label()
 		if len([]rune(label)) > 28 {

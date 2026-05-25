@@ -69,31 +69,31 @@ func (s *MenuScene) Draw(screen *ebiten.Image) {
 	mp := image.Point{X: mx, Y: my}
 
 	// title
-	title := "House on the Hill"
-	subtitle := "use mouse: drag to pan, wheel to zoom, middle-click resets"
+	title := "山上之屋"
+	subtitle := "鼠标：拖拽平移，滚轮缩放，中键重置视野"
 	titleX := s.screenW/2 - len(title)*ui.GlyphWidth/2
 	subtitleX := s.screenW/2 - len(subtitle)*ui.GlyphWidth/2
 	ui.DrawAt(screen, title, titleX, s.screenH/2-160)
 	ui.DrawAt(screen, subtitle, subtitleX, s.screenH/2-130)
 
-	drawButton(screen, s.startBtn, "Start Game", mp.In(s.startBtn))
-	toggleLabel := "Extension Map: OFF"
+	drawButton(screen, s.startBtn, "开始游戏", mp.In(s.startBtn))
+	toggleLabel := "扩展地图：关"
 	if s.useExtension {
-		toggleLabel = "Extension Map: ON"
+		toggleLabel = "扩展地图：开"
 	}
 	drawButton(screen, s.toggleBtn, toggleLabel, mp.In(s.toggleBtn))
-	drawButton(screen, s.exitBtn, "Exit", mp.In(s.exitBtn))
+	drawButton(screen, s.exitBtn, "退出", mp.In(s.exitBtn))
 
 	// footer
-	footer := fmt.Sprintf("Base deck: 50 rooms  Extension: +20 rooms (%s)", boolOnOff(s.useExtension))
+	footer := fmt.Sprintf("基础牌库：50 个房间   扩展：+20 个房间 (%s)", boolOnOff(s.useExtension))
 	ui.DrawAt(screen, footer, s.screenW/2-len(footer)*ui.GlyphWidth/2, s.screenH-40)
 }
 
 func boolOnOff(v bool) string {
 	if v {
-		return "enabled"
+		return "已启用"
 	}
-	return "disabled"
+	return "未启用"
 }
 
 func drawButton(dst *ebiten.Image, r image.Rectangle, label string, hover bool) {

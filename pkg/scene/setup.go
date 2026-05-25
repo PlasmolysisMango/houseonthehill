@@ -212,13 +212,13 @@ func (s *SetupScene) Draw(screen *ebiten.Image) {
 	mx, my := ebiten.CursorPosition()
 	mp := image.Point{X: mx, Y: my}
 
-	title := "Choose your explorers"
-	subtitle := "Click a card or arrow to cycle. R / Random shuffles. Enter starts."
+	title := "选择你的探险者"
+	subtitle := "点击卡片或箭头切换。R / 随机 随机抽选。Enter 开始。"
 	ui.DrawAt(screen, title, s.screenW/2-len(title)*ui.GlyphWidth/2, 32)
 	ui.DrawAt(screen, subtitle, s.screenW/2-len(subtitle)*ui.GlyphWidth/2, 56)
 
 	if s.loadErr != nil {
-		warn := "characters.yaml failed to load: " + s.loadErr.Error()
+		warn := "characters.yaml 加载失败：" + s.loadErr.Error()
 		ui.DrawColorAt(screen, warn, 16, 76, color.RGBA{R: 230, G: 120, B: 120, A: 255})
 	}
 
@@ -226,9 +226,9 @@ func (s *SetupScene) Draw(screen *ebiten.Image) {
 		s.drawSeatCard(screen, i, mp)
 	}
 
-	drawButton(screen, s.backBtn, "Back [Esc]", mp.In(s.backBtn))
-	drawButton(screen, s.randomBtn, "Random [R]", mp.In(s.randomBtn))
-	drawButton(screen, s.startBtn, "Start [Enter]", mp.In(s.startBtn))
+	drawButton(screen, s.backBtn, "返回 [Esc]", mp.In(s.backBtn))
+	drawButton(screen, s.randomBtn, "随机 [R]", mp.In(s.randomBtn))
+	drawButton(screen, s.startBtn, "开始 [Enter]", mp.In(s.startBtn))
 }
 
 func (s *SetupScene) drawSeatCard(dst *ebiten.Image, seat int, mp image.Point) {
@@ -243,12 +243,12 @@ func (s *SetupScene) drawSeatCard(dst *ebiten.Image, seat int, mp image.Point) {
 	vector.StrokeRect(dst, float32(x), float32(y), float32(w), float32(h), 2,
 		color.RGBA{R: 220, G: 200, B: 180, A: 255}, false)
 
-	heading := fmt.Sprintf("Seat %d", seat+1)
+	heading := fmt.Sprintf("座位 %d", seat+1)
 	ui.DrawAt(dst, heading, x+12, y+10)
 
 	idx := s.picks[seat]
 	if idx < 0 || idx >= len(s.chars) {
-		ui.DrawColorAt(dst, "(no character)", x+12, y+44, color.RGBA{R: 180, G: 180, B: 180, A: 255})
+		ui.DrawColorAt(dst, "（未选人物）", x+12, y+44, color.RGBA{R: 180, G: 180, B: 180, A: 255})
 	} else {
 		ch := s.chars[idx]
 		// colour swatch
@@ -265,18 +265,18 @@ func (s *SetupScene) drawSeatCard(dst *ebiten.Image, seat int, mp image.Point) {
 			name = fmt.Sprintf("%s / %s", ch.NameCN, ch.NameEN)
 		}
 		ui.DrawAt(dst, name, x+12+int(swatch)+8, y+34)
-		ageLine := fmt.Sprintf("Age %d   #%d", ch.Age, ch.ID)
+		ageLine := fmt.Sprintf("年龄 %d   编号 #%d", ch.Age, ch.ID)
 		ui.DrawColorAt(dst, ageLine, x+12+int(swatch)+8, y+50,
 			color.RGBA{R: 200, G: 200, B: 200, A: 255})
 
 		// stat preview: starting values
-		stats := fmt.Sprintf("MIG %d   SPD %d   SAN %d   KNW %d",
+		stats := fmt.Sprintf("强壮 %d   迅捷 %d   神志 %d   知识 %d",
 			ch.Might.Tracks[clampStart(ch.Might)],
 			ch.Speed.Tracks[clampStart(ch.Speed)],
 			ch.Sanity.Tracks[clampStart(ch.Sanity)],
 			ch.Knowledge.Tracks[clampStart(ch.Knowledge)])
 		ui.DrawAt(dst, stats, x+12, y+82)
-		hint := "click / \u2192 next   \u2190 prev"
+		hint := "点击 / → 下一个   ← 上一个"
 		ui.DrawColorAt(dst, hint, x+12, y+h-22,
 			color.RGBA{R: 170, G: 170, B: 170, A: 255})
 	}
